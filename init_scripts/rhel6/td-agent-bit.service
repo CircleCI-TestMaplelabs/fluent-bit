@@ -13,7 +13,7 @@ dir="/opt/sfapm/td-agent-bit/opt/td-agent-bit/bin/"
 cmd="/opt/sfapm/td-agent-bit/opt/td-agent-bit/bin/td-agent-bit -c /opt/sfapm/td-agent-bit/etc/td-agent-bit/td-agent-bit.conf"
 user=""
 
-name=`basename $0`
+name="td-agent-bit"
 pid_file="/var/run/$name.pid"
 stdout_log="/var/log/$name.log"
 stderr_log="/var/log/$name.err"
@@ -82,10 +82,11 @@ case "$1" in
     $0 start
     ;;
     status)
+    pidval=$(<"$pid_file")
     if is_running; then
-        echo "running"
+        echo "fluentbit with pid $pidval is running"
     else
-        echo "stopped"
+        echo "fluentbit stopped"
         exit 1
     fi
     ;;
