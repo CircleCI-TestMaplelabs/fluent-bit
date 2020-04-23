@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019      The Fluent Bit Authors
+ *  Copyright (C) 2019-2020 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,12 +28,13 @@
 #include <fluent-bit/flb_config.h>
 
 #ifdef FLB_HAVE_TLS
+#define FLB_UPSTREAM_TLS_HANDSHAKE_TIMEOUT 5  /* 5 seconds */
 #include <mbedtls/net.h>
 #endif
 /*
  * Upstream creation FLAGS set by Fluent Bit sub-components
  * ========================================================
- *  Copyright (C) 2019      The Fluent Bit Authors
+ *  Copyright (C) 2019-2020 The Fluent Bit Authors
  *
  * --- flb_io.h ---
  *   #define  FLB_IO_TCP      1
@@ -82,6 +83,8 @@ struct flb_upstream {
     /* context with mbedTLS data to handle certificates and keys */
     struct flb_tls *tls;
 #endif
+
+    struct mk_list _head;
 };
 
 /* Upstream TCP connection */
@@ -110,6 +113,10 @@ struct flb_upstream_conn {
     struct mk_list _head;
 
 #ifdef FLB_HAVE_TLS
+    /* Timeout: TLS handshake */
+    int tls_handshake_start;
+    int tls_handshake_timeout;
+
     /* Each TCP connections using TLS needs a session */
     struct flb_tls_session *tls_session;
     mbedtls_net_context tls_net_context;
@@ -127,5 +134,6 @@ int flb_upstream_destroy(struct flb_upstream *u);
 
 struct flb_upstream_conn *flb_upstream_conn_get(struct flb_upstream *u);
 int flb_upstream_conn_release(struct flb_upstream_conn *u_conn);
+int flb_upstream_conn_timeouts(struct flb_config *ctx);
 
 #endif

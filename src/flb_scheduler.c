@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019      The Fluent Bit Authors
+ *  Copyright (C) 2019-2020 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -307,6 +307,10 @@ int flb_sched_request_destroy(struct flb_config *config,
 {
     struct flb_sched_timer *timer;
 
+    if (!req) {
+        return 0;
+    }
+
     mk_list_del(&req->_head);
 
     timer = req->timer;
@@ -364,11 +368,11 @@ int flb_sched_event_handler(struct flb_config *config, struct mk_event *event)
         req = timer->data;
         consume_byte(req->fd);
 
-        /* Destroy this scheduled request, it's not longer required */
-        flb_sched_request_destroy(config, req);
-
         /* Dispatch 'retry' */
         flb_engine_dispatch_retry(req->data, config);
+
+        /* Destroy this scheduled request, it's not longer required */
+        flb_sched_request_destroy(config, req);
     }
     else if (timer->type == FLB_SCHED_TIMER_FRAME) {
         sched = timer->data;

@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019      The Fluent Bit Authors
+ *  Copyright (C) 2019-2020 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -412,7 +412,7 @@ int flb_parser_conf_file(const char *file, struct flb_config *config)
     struct mk_list *head;
     struct stat st;
     struct flb_parser_types *types = NULL;
-    struct mk_list *decoders;
+    struct mk_list *decoders = NULL;
 
 #ifndef FLB_HAVE_STATIC_CONF
     ret = stat(file, &st);
@@ -705,6 +705,11 @@ int flb_parser_time_lookup(const char *time_str, size_t tsize,
         }
 
         gmtime_r(&time_now, &tmy);
+
+        /* Make the timestamp default to today */
+        tm->tm_mon = tmy.tm_mon;
+        tm->tm_mday = tmy.tm_mday;
+
         uint64_t t = tmy.tm_year + 1900;
 
         fmt = tmp;
