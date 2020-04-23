@@ -370,7 +370,8 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             } else {
                 p = logstash_index + flb_sds_len(ctx->logstash_prefix);
             }
-            *p++ = '-';
+	    /* commented by Upendra */
+            //*p++ = '-';
 
             len = p - logstash_index;
             s = strftime(p, sizeof(logstash_index) - len - 1,

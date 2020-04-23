@@ -24,6 +24,7 @@ RUN apt-get update && \
     libpq-dev \
     postgresql-server-dev-all \
     flex \
+    wget \
     bison
 
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log /tmp/src/
@@ -56,10 +57,24 @@ COPY conf/fluent-bit.conf \
      conf/plugins.conf \
      /fluent-bit/etc/
 
-FROM gcr.io/distroless/cc-debian10
-LABEL maintainer="Eduardo Silva <eduardo@treasure-data.com>"
-LABEL Description="Fluent Bit docker image" Vendor="Fluent Organization" Version="1.1"
 
+RUN curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases/latest \
+| grep -w "browser_download_url" \
+| cut -d":" -f 2,3 \
+| tr -d '"' \
+| xargs wget -q 
+
+RUN tar -zxvf sfagent*linux_x86_64.tar.gz \
+&& mv scripts/* /fluent-bit/etc/ \
+&& mv geoipdb.tar.gz /fluent-bit/etc/geoipdb.tar.gz \
+&& tar -C /fluent-bit/etc -xf /fluent-bit/etc/geoipdb.tar.gz \
+&& rm -f /fluent-bit/etc/geoipdb.tar.gz
+
+FROM debian:buster
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    mmdb-bin
 COPY --from=builder /usr/lib/x86_64-linux-gnu/*sasl* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libz* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /lib/x86_64-linux-gnu/libz* /lib/x86_64-linux-gnu/
@@ -95,9 +110,10 @@ COPY --from=builder /lib/x86_64-linux-gnu/libcom_err* /lib/x86_64-linux-gnu/
 COPY --from=builder /lib/x86_64-linux-gnu/libkeyutils* /lib/x86_64-linux-gnu/
 
 COPY --from=builder /fluent-bit /fluent-bit
+RUN mv /fluent-bit/etc /etc/td-agent-bit 
 
 #
 EXPOSE 2020
 
 # Entry point
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/etc/td-agent-bit/fluent-bit.conf"]
