@@ -25,6 +25,7 @@ RUN apt-get update && \
     postgresql-server-dev-all \
     flex \
     wget \
+    git \
     bison
 
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log /tmp/src/
@@ -47,28 +48,9 @@ RUN make -j $(getconf _NPROCESSORS_ONLN)
 RUN install bin/fluent-bit /fluent-bit/bin/
 
 # Configuration files
-COPY conf/fluent-bit.conf \
-     conf/parsers.conf \
-     conf/parsers_ambassador.conf \
-     conf/parsers_java.conf \
-     conf/parsers_extra.conf \
-     conf/parsers_openstack.conf \
-     conf/parsers_cinder.conf \
-     conf/plugins.conf \
-     /fluent-bit/etc/
-
-
-RUN curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases/latest \
-| grep -w "browser_download_url" \
-| cut -d":" -f 2,3 \
-| tr -d '"' \
-| xargs wget -q 
-
-RUN tar -zxvf sfagent*linux_x86_64.tar.gz \
-&& mv scripts/* /fluent-bit/etc/ \
-&& mv geoipdb.tar.gz /fluent-bit/etc/geoipdb.tar.gz \
-&& tar -C /fluent-bit/etc -xf /fluent-bit/etc/geoipdb.tar.gz \
-&& rm -f /fluent-bit/etc/geoipdb.tar.gz
+RUN git clone https://github.com/snappyflow/fluentbit-kube-config.git \
+&& cd fluentbit-kube-config && ls -l && mv * /fluent-bit/etc/
+RUN ls -l /fluent-bit/etc/
 
 FROM debian:buster
 

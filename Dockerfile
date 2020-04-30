@@ -44,8 +44,8 @@ RUN cmake -DFLB_DEBUG=Off \
           -DFLB_OUT_KAFKA=On \
           -DFLB_OUT_PGSQL=On ../
 
-#RUN make -j $(getconf _NPROCESSORS_ONLN)
-#RUN install bin/fluent-bit /fluent-bit/bin/
+RUN make -j $(getconf _NPROCESSORS_ONLN)
+RUN install bin/fluent-bit /fluent-bit/bin/
 
 # Configuration files
 RUN git clone https://github.com/snappyflow/fluentbit-kube-config.git \
