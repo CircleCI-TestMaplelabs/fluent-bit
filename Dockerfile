@@ -26,7 +26,6 @@ RUN apt-get update && \
     flex \
     wget \
     git \
-    autoconf \
     bison
 
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log /tmp/src/

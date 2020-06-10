@@ -9,7 +9,6 @@ ExternalProject_Add(maxminddb
   EXCLUDE_FROM_ALL TRUE
   SOURCE_DIR ${LIBMAXMINDDB_SRC}
   INSTALL_DIR ${LIBMAXMINDDB_DEST}
-  COMMAND  cd ${LIBMAXMINDDB_SRC} && ./bootstrap
   CONFIGURE_COMMAND ${LIBMAXMINDDB_SRC}/configure --with-pic --disable-shared --enable-static --prefix=${LIBMAXMINDDB_DEST}
   BUILD_COMMAND $(MAKE) 
   INSTALL_COMMAND $(MAKE) install)
