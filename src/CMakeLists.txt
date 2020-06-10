@@ -125,6 +125,10 @@ set(extra_libs
 
 set(extra_libs
   ${extra_libs}
+  "libmaxminddb")
+
+set(extra_libs
+  ${extra_libs}
   "rbtree")
 
 if(FLB_JEMALLOC)

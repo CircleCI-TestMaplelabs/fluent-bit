@@ -201,6 +201,7 @@ REGISTER_OUT_PLUGIN("out_gelf")
 REGISTER_FILTER_PLUGIN("filter_aws")
 REGISTER_FILTER_PLUGIN("filter_record_modifier")
 REGISTER_FILTER_PLUGIN("filter_throttle")
+REGISTER_FILTER_PLUGIN("filter_apm_geoip")
 
 if(FLB_REGEX)
   REGISTER_FILTER_PLUGIN("filter_grep")

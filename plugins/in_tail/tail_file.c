@@ -436,8 +436,6 @@ static int tag_compose(char *tag, char *fname, char *out_buf, size_t *out_size,
     if (tag_regex) {
         n = flb_regex_do(tag_regex, fname, strlen(fname), &result);
         if (n <= 0) {
-            flb_plg_error(ctx->ins, "invalid tag_regex pattern for file %s",
-                          fname);
             return -1;
         }
         else {
@@ -718,7 +716,6 @@ int flb_tail_file_append(char *path, struct stat *st, int mode,
         }
         flb_free(tag);
         if (ret != 0) {
-            flb_plg_error(ctx->ins, "failed to compose tag for file: %s", path);
             goto error;
         }
     }
