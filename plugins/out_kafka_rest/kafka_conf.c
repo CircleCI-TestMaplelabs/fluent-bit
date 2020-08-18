@@ -86,13 +86,21 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
         }
     }
 
+    /* Path */
+    tmp = flb_output_get_property("path", ins);
+    if (tmp) {
+        ctx->path = flb_strdup(tmp);
+    } else {
+        ctx->path = flb_strdup("");
+    }
+
     /* Auth Token */
     tmp = flb_output_get_property("token", ins);
     if (tmp) {
         ctx->token = flb_strdup(tmp);
         ctx->token_len = strlen(tmp);
     } else {
-        ctx->token = "";
+        ctx->token = flb_strdup("");
         ctx->token_len = 0;
     }
 
@@ -173,7 +181,11 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
     }
 
     /* Set partition based on topic */
-    snprintf(ctx->uri, sizeof(ctx->uri) - 1, "/topics/%s", ctx->topic);
+    if (strlen(ctx->path)) {
+        snprintf(ctx->uri, sizeof(ctx->uri) - 1, "/%s/topics/%s", ctx->path, ctx->topic);
+    } else {
+        snprintf(ctx->uri, sizeof(ctx->uri) - 1, "/topics/%s", ctx->topic);
+    }
 
     /* Kafka: message key */
     tmp = flb_output_get_property("message_key", ins);
@@ -195,8 +207,9 @@ int flb_kr_conf_destroy(struct flb_kafka_rest *ctx)
     flb_free(ctx->http_user);
     flb_free(ctx->http_passwd);
 
+    flb_free(ctx->path);
+    
     flb_free(ctx->token);
-    flb_free(ctx->token_len);
     
     flb_free(ctx->time_key);
     flb_free(ctx->time_key_format);

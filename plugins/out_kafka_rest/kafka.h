@@ -36,9 +36,12 @@ struct flb_kafka_rest {
     char *http_user;
     char *http_passwd;
 
+    /* Path */
+    char *path;
+
     /* Auth Token */
     char *token;
-    int token_len;
+    size_t token_len;
 
     /* time key */
     int time_key_len;

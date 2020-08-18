@@ -222,7 +222,10 @@ static void cb_kafka_flush(const void *data, size_t bytes,
     c = flb_http_client(u_conn, FLB_HTTP_POST, ctx->uri,
                         js, js_size, NULL, 0, NULL, 0);
     flb_http_add_header(c, "User-Agent", 10, "Fluent-Bit", 10);
-    flb_http_add_header(c, "Authorization", 13, ctx->token, ctx->token_len);
+    if (ctx->token_len > 0) {
+        flb_http_add_header(c, "Authorization", 13, ctx->token, ctx->token_len);
+    }
+    
     flb_http_add_header(c,
                         "Content-Type", 12,
                         "application/vnd.kafka.json.v2+json", 34);
