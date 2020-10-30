@@ -93,7 +93,6 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
     } else {
         ctx->path = flb_strdup("");
     }
-
     /* Auth Token */
     tmp = flb_output_get_property("token", ins);
     if (tmp) {
@@ -103,7 +102,6 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
         ctx->token = flb_strdup("");
         ctx->token_len = 0;
     }
-
     /* Time Key */
     tmp = flb_output_get_property("time_key", ins);
     if (tmp) {
@@ -206,11 +204,8 @@ int flb_kr_conf_destroy(struct flb_kafka_rest *ctx)
     flb_free(ctx->topic);
     flb_free(ctx->http_user);
     flb_free(ctx->http_passwd);
-
     flb_free(ctx->path);
-    
     flb_free(ctx->token);
-    
     flb_free(ctx->time_key);
     flb_free(ctx->time_key_format);
 

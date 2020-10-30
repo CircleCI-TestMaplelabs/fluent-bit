@@ -57,7 +57,7 @@ static flb_sds_t kafka_rest_format(const void *data, size_t bytes,
     msgpack_sbuffer mp_sbuf;
     msgpack_packer mp_pck;
 
-    /* Init temporal buffers */
+    /* Init temporary buffers */
     msgpack_sbuffer_init(&mp_sbuf);
     msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
 
@@ -225,7 +225,6 @@ static void cb_kafka_flush(const void *data, size_t bytes,
     if (ctx->token_len > 0) {
         flb_http_add_header(c, "Authorization", 13, ctx->token, ctx->token_len);
     }
-    
     flb_http_add_header(c,
                         "Content-Type", 12,
                         "application/vnd.kafka.json.v2+json", 34);

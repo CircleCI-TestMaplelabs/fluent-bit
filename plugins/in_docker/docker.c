@@ -99,6 +99,7 @@ static char *read_line(FILE *fin)
         }
     }
 
+    flb_free(line);
     return NULL;
 }
 

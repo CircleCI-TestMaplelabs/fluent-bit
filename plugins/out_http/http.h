@@ -43,6 +43,7 @@ struct flb_out_http {
 
     int json_date_format;
     flb_sds_t json_date_key;
+    flb_sds_t date_key;        /* internal use */
 
     /* HTTP URI */
     char *uri;
@@ -57,6 +58,9 @@ struct flb_out_http {
 
     /* Compression mode (gzip) */
     int compress_gzip;
+
+    /* Allow duplicated headers */
+    int allow_dup_headers;
 
     /* Upstream connection to the backend server */
     struct flb_upstream *u;

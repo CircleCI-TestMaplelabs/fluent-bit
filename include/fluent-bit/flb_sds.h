@@ -87,10 +87,21 @@ static inline int flb_sds_cmp(flb_sds_t s, const char *str, int len)
     return strncmp(s, str, len);
 }
 
+static inline int flb_sds_casecmp(flb_sds_t s, const char *str, int len)
+{
+    if (flb_sds_len(s) != len) {
+        return -1;
+    }
+
+    return strncasecmp(s, str, len);
+}
+
 flb_sds_t flb_sds_create(const char *str);
 flb_sds_t flb_sds_create_len(const char *str, int len);
 flb_sds_t flb_sds_create_size(size_t size);
 flb_sds_t flb_sds_cat(flb_sds_t s, const char *str, int len);
+flb_sds_t flb_sds_cat_esc(flb_sds_t s, const char *str, int len,
+                                       char *esc, size_t esc_size);
 flb_sds_t flb_sds_cat_utf8(flb_sds_t *sds, const char *str, int len);
 flb_sds_t flb_sds_increase(flb_sds_t s, size_t len);
 flb_sds_t flb_sds_copy(flb_sds_t s, const char *str, int len);

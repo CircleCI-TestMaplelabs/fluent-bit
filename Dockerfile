@@ -2,9 +2,9 @@ FROM debian:buster as builder
 
 # Fluent Bit version
 ENV FLB_MAJOR 1
-ENV FLB_MINOR 5
+ENV FLB_MINOR 7
 ENV FLB_PATCH 0
-ENV FLB_VERSION 1.5.0
+ENV FLB_VERSION 1.7.0
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -20,12 +20,12 @@ RUN apt-get update && \
     libsasl2-dev \
     pkg-config \
     libsystemd-dev \
+    autoconf \
+    libzstd-dev \
     zlib1g-dev \
     libpq-dev \
     postgresql-server-dev-all \
     flex \
-    wget \
-    git \
     bison
 
 RUN mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log /tmp/src/
@@ -48,15 +48,20 @@ RUN make -j $(getconf _NPROCESSORS_ONLN)
 RUN install bin/fluent-bit /fluent-bit/bin/
 
 # Configuration files
-RUN git clone https://github.com/snappyflow/fluentbit-kube-config.git \
-&& cd fluentbit-kube-config && ls -l && mv * /fluent-bit/etc/
-RUN ls -l /fluent-bit/etc/
+COPY conf/fluent-bit.conf \
+     conf/parsers.conf \
+     conf/parsers_ambassador.conf \
+     conf/parsers_java.conf \
+     conf/parsers_extra.conf \
+     conf/parsers_openstack.conf \
+     conf/parsers_cinder.conf \
+     conf/plugins.conf \
+     /fluent-bit/etc/
 
-FROM debian:buster
+FROM gcr.io/distroless/cc-debian10
+LABEL maintainer="Eduardo Silva <eduardo@treasure-data.com>"
+LABEL Description="Fluent Bit docker image" Vendor="Fluent Organization" Version="1.1"
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    mmdb-bin
 COPY --from=builder /usr/lib/x86_64-linux-gnu/*sasl* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libz* /usr/lib/x86_64-linux-gnu/
 COPY --from=builder /lib/x86_64-linux-gnu/libz* /lib/x86_64-linux-gnu/
@@ -92,10 +97,9 @@ COPY --from=builder /lib/x86_64-linux-gnu/libcom_err* /lib/x86_64-linux-gnu/
 COPY --from=builder /lib/x86_64-linux-gnu/libkeyutils* /lib/x86_64-linux-gnu/
 
 COPY --from=builder /fluent-bit /fluent-bit
-RUN mv /fluent-bit/etc /etc/td-agent-bit 
 
 #
 EXPOSE 2020
 
 # Entry point
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/etc/td-agent-bit/fluent-bit.conf"]
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]

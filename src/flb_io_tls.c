@@ -30,6 +30,7 @@
 #include <fluent-bit/flb_info.h>
 #include <fluent-bit/flb_mem.h>
 #include <fluent-bit/flb_io.h>
+#include <fluent-bit/flb_time.h>
 #include <fluent-bit/flb_tls.h>
 #include <fluent-bit/flb_io_tls.h>
 #include <fluent-bit/flb_utils.h>
@@ -230,8 +231,8 @@ static void flb_tls_debug(void *ctx, int level,
 {
     (void) level;
 
-    flb_debug("[io_tls] %s %04d: %.*s", file + sizeof(FLB_SOURCE_DIR) - 1,
-              line, strlen(str), str);
+    flb_debug("[io_tls] %s %04i: %s", file + sizeof(FLB_SOURCE_DIR) - 1,
+              line, str);
 }
 
 struct flb_tls_session *flb_tls_session_new(struct flb_tls_context *ctx)
@@ -326,16 +327,7 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
     struct flb_tls_session *session;
     struct flb_upstream_conn *u_conn = _u_conn;
     struct flb_upstream *u = u_conn->u;
-
     struct flb_thread *th = _th;
-
-#ifdef FLB_HAVE_TLS
-    time_t now = time(NULL);
-    if (u->tls->handshake_timeout > 0) {
-        u_conn->tls_handshake_start = now;
-        u_conn->tls_handshake_timeout = now + u->tls->handshake_timeout;
-    }
-#endif
 
     session = flb_tls_session_new(u->tls->context);
     if (!session) {
@@ -365,13 +357,39 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
             goto error;
         }
 
+        flag = 0;
         if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
             flag = MK_EVENT_WRITE;
         }
         else if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
             flag = MK_EVENT_READ;
         }
-        else {
+
+        /*
+         * If there are no coroutine thread context (th == NULL) it means this
+         * TLS handshake is happening from a blocking code. Just sleep a bit
+         * and retry.
+         *
+         * In the other case for an async socket 'th' is NOT NULL so the code
+         * is under a coroutine context and it can yield.
+         */
+        if (!th) {
+            flb_trace("[io_tls] handshake connection #%i in process to %s:%i",
+                      u_conn->fd, u->tcp_host, u->tcp_port);
+
+            /* Connect timeout */
+            if (u->net.connect_timeout > 0 &&
+                u_conn->ts_connect_timeout > 0 &&
+                u_conn->ts_connect_timeout <= time(NULL)) {
+                flb_error("[io_tls] handshake connection #%i to %s:%i timed out after "
+                          "%i seconds",
+                          u_conn->fd,
+                          u->tcp_host, u->tcp_port, u->net.connect_timeout);
+                goto error;
+            }
+
+            flb_time_msleep(500);
+            goto retry_handshake;
         }
 
         /*
@@ -398,11 +416,6 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
     }
     flb_trace("[io_tls] connection OK");
 
-#ifdef FLB_HAVE_TLS
-    u_conn->tls_handshake_start = -1;
-    u_conn->tls_handshake_timeout = -1;
-#endif
-
     return 0;
 
  error:
@@ -415,7 +428,7 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
     return -1;
 }
 
-int flb_io_tls_net_read(struct flb_thread *th, struct flb_upstream_conn *u_conn,
+int flb_io_tls_net_read_async(struct flb_thread *th, struct flb_upstream_conn *u_conn,
                         void *buf, size_t len)
 {
     int ret;
@@ -442,7 +455,31 @@ int flb_io_tls_net_read(struct flb_thread *th, struct flb_upstream_conn *u_conn,
     return ret;
 }
 
-int flb_io_tls_net_write(struct flb_thread *th, struct flb_upstream_conn *u_conn,
+int flb_io_tls_net_read(struct flb_upstream_conn *u_conn,
+                        void *buf, size_t len)
+{
+    int ret;
+
+ retry_read:
+    ret = mbedtls_ssl_read(&u_conn->tls_session->ssl, buf, len);
+    if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
+        goto retry_read;
+    }
+    else if (ret < 0) {
+        char err_buf[72];
+        mbedtls_strerror(ret, err_buf, sizeof(err_buf));
+        flb_error("[tls] SSL error: %s", err_buf);
+        return -1;
+    }
+    else if (ret == 0) {
+        flb_debug("[tls] SSL connection closed by peer");
+        return -1;
+    }
+
+    return ret;
+}
+
+int flb_io_tls_net_write_async(struct flb_thread *th, struct flb_upstream_conn *u_conn,
                          const void *data, size_t len, size_t *out_len)
 {
     int ret;
@@ -482,5 +519,39 @@ int flb_io_tls_net_write(struct flb_thread *th, struct flb_upstream_conn *u_conn
 
     *out_len = total;
     mk_event_del(u->evl, &u_conn->event);
+    return 0;
+}
+
+
+int flb_io_tls_net_write(struct flb_upstream_conn *u_conn,
+                         const void *data, size_t len, size_t *out_len)
+{
+    int ret;
+    size_t total = 0;
+
+retry_write:
+    ret = mbedtls_ssl_write(&u_conn->tls_session->ssl,
+                            (unsigned char *) data + total,
+                            len - total);
+    if (ret == MBEDTLS_ERR_SSL_WANT_WRITE) {
+        goto retry_write;
+    }
+    else if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
+        goto retry_write;
+    }
+    else if (ret < 0) {
+        char err_buf[72];
+        mbedtls_strerror(ret, err_buf, sizeof(err_buf));
+        flb_error("[tls] SSL error: %s", err_buf);
+        return -1;
+    }
+
+    /* Update counter and check if we need to continue writing */
+    total += ret;
+    if (total < len) {
+        goto retry_write;
+    }
+
+    *out_len = total;
     return 0;
 }

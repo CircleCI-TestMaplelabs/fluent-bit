@@ -41,7 +41,7 @@
 #define FLB_HASH_TABLE_SIZE 256
 
 /*
- * When merging nested JSON strings from Docker logs, we need a temporal
+ * When merging nested JSON strings from Docker logs, we need a temporary
  * buffer to perform the convertion. To optimize the process, we pre-allocate
  * a buffer for that purpose. The FLB_MERGE_BUF_SIZE defines the buffer size.
  *
@@ -59,7 +59,11 @@
  * Default expected Kubernetes tag prefix, this is used mostly when source
  * data comes from in_tail with custom tags like: kube.service.*
  */
+#ifdef FLB_SYSTEM_WINDOWS
+#define FLB_KUBE_TAG_PREFIX "kube.c.var.log.containers."
+#else
 #define FLB_KUBE_TAG_PREFIX "kube.var.log.containers."
+#endif
 
 struct kube_meta;
 
@@ -139,6 +143,9 @@ struct flb_kube {
     /* Pre-formatted HTTP Authorization header value */
     char *auth;
     size_t auth_len;
+
+    int dns_retries;
+    int dns_wait_time;
 
     struct flb_tls tls;
     struct flb_config *config;

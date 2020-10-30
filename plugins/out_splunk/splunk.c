@@ -74,13 +74,20 @@ static int splunk_format(const void *in_buf, size_t in_bytes,
     msgpack_unpacked_init(&result);
 
     while (msgpack_unpack_next(&result, in_buf, in_bytes, &off) == MSGPACK_UNPACK_SUCCESS) {
+        if (result.data.type != MSGPACK_OBJECT_ARRAY) {
+            continue;
+        }
+
         root = result.data;
+        if (root.via.array.size != 2) {
+            continue;
+        }
 
         /* Get timestamp */
         flb_time_pop_from_msgpack(&tm, &result, &obj);
         t = flb_time_to_double(&tm);
 
-        /* Create temporal msgpack buffer */
+        /* Create temporary msgpack buffer */
         msgpack_sbuffer_init(&mp_sbuf);
         msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
 
@@ -190,7 +197,7 @@ static void cb_splunk_flush(const void *data, size_t bytes,
     ret = flb_http_do(c, &b_sent);
     if (ret != 0) {
         flb_plg_warn(ctx->ins, "http_do=%i", ret);
-        goto retry;
+        ret = FLB_RETRY;
     }
     else {
         if (c->resp.status != 200) {
@@ -201,7 +208,14 @@ static void cb_splunk_flush(const void *data, size_t bytes,
             else {
                 flb_plg_warn(ctx->ins, "http_status=%i", c->resp.status);
             }
-            goto retry;
+            /* Requests that get 4xx responses from the Splunk HTTP Event
+               Collector will *always* fail, so there is no point in retrying
+               them: https://docs.splunk.com/Documentation/Splunk/8.0.5/Data/TroubleshootHTTPEventCollector#Possible_error_codes */
+            ret = (c->resp.status < 400 || c->resp.status >= 500) ?
+                FLB_RETRY : FLB_ERROR;
+        }
+        else {
+            ret = FLB_OK;
         }
     }
 
@@ -209,14 +223,7 @@ static void cb_splunk_flush(const void *data, size_t bytes,
     flb_http_client_destroy(c);
     flb_sds_destroy(payload);
     flb_upstream_conn_release(u_conn);
-    FLB_OUTPUT_RETURN(FLB_OK);
-
-    /* Issue a retry */
- retry:
-    flb_http_client_destroy(c);
-    flb_sds_destroy(payload);
-    flb_upstream_conn_release(u_conn);
-    FLB_OUTPUT_RETURN(FLB_RETRY);
+    FLB_OUTPUT_RETURN(ret);
 }
 
 static int cb_splunk_exit(void *data, struct flb_config *config)

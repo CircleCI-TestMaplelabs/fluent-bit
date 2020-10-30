@@ -65,7 +65,7 @@ struct flb_task_route {
  * task data to the desired output path.
  */
 struct flb_task_retry {
-    int attemps;                        /* number of attemps, default 1 */
+    int attempts;                       /* number of attempts, default 1 */
     struct flb_output_instance *o_ins;  /* route that we are retrying   */
     struct flb_task *parent;            /* parent task reference        */
     struct mk_list _head;               /* link to parent task list     */
@@ -83,6 +83,9 @@ struct flb_task {
     const char *buf;                    /* buffer                    */
     size_t size;                        /* buffer data size          */
     void *ic;                           /* input chunk */
+#ifdef FLB_HAVE_METRICS
+    int records;                        /* numbers of records in 'buf'   */
+#endif
     struct mk_list threads;             /* ref flb_input_instance->tasks */
     struct mk_list routes;              /* routes to dispatch data       */
     struct mk_list retries;             /* queued in-memory retries      */

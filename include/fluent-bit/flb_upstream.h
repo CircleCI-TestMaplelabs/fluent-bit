@@ -25,12 +25,14 @@
 
 #include <fluent-bit/flb_info.h>
 #include <fluent-bit/flb_socket.h>
+#include <fluent-bit/flb_network.h>
 #include <fluent-bit/flb_config.h>
+#include <fluent-bit/flb_io.h>
 
 #ifdef FLB_HAVE_TLS
-#define FLB_UPSTREAM_TLS_HANDSHAKE_TIMEOUT 5  /* 5 seconds */
 #include <mbedtls/net.h>
 #endif
+
 /*
  * Upstream creation FLAGS set by Fluent Bit sub-components
  * ========================================================
@@ -54,9 +56,8 @@ struct flb_upstream {
 
     int n_connections;
 
-
-    /* Keepalive */
-    int ka_timeout;    /* maximum number of seconds that a connection can exists */
+    /* Networking setup for timeouts and network interfaces */
+    struct flb_net_setup net;
 
     /*
      * If an upstream context has been created in HA mode, this flag is
@@ -79,6 +80,8 @@ struct flb_upstream {
      */
     struct mk_list busy_queue;
 
+    struct mk_list destroy_queue;
+
 #ifdef FLB_HAVE_TLS
     /* context with mbedTLS data to handle certificates and keys */
     struct flb_tls *tls;
@@ -95,12 +98,32 @@ struct flb_upstream_conn {
     /* Socker */
     flb_sockfd_t fd;
 
+    /*
+     * Recycle: if the connection is keepalive, this flag is always on, but if
+     * the caller wants to drop the connection once is released, it can set
+     * recycle to false.
+     */
+    int recycle;
+
     /* Keepalive */
     int ka_count;        /* how many times this connection has been used */
 
+    /*
+     * Custom 'error' for the connection file descriptor. Commonly used to
+     * specify a reason for an exception that was generated locally: consider
+     * a connect timeout, we shutdown(2) the connection but in reallity we
+     * might want to express an 'ETIMEDOUT'
+     */
+    int net_error;
+
     /* Timestamps */
+    time_t ts_assigned;
     time_t ts_created;
     time_t ts_available;  /* sets the 'start' available time */
+
+    /* Connect */
+    time_t ts_connect_start;
+    time_t ts_connect_timeout;
 
     /* Upstream parent */
     struct flb_upstream *u;
@@ -113,10 +136,6 @@ struct flb_upstream_conn {
     struct mk_list _head;
 
 #ifdef FLB_HAVE_TLS
-    /* Timeout: TLS handshake */
-    int tls_handshake_start;
-    int tls_handshake_timeout;
-
     /* Each TCP connections using TLS needs a session */
     struct flb_tls_session *tls_session;
     mbedtls_net_context tls_net_context;
@@ -132,8 +151,14 @@ struct flb_upstream *flb_upstream_create_url(struct flb_config *config,
 
 int flb_upstream_destroy(struct flb_upstream *u);
 
+int flb_upstream_conn_recycle(struct flb_upstream_conn *conn, int val);
 struct flb_upstream_conn *flb_upstream_conn_get(struct flb_upstream *u);
 int flb_upstream_conn_release(struct flb_upstream_conn *u_conn);
 int flb_upstream_conn_timeouts(struct flb_config *ctx);
+int flb_upstream_conn_pending_destroy(struct flb_config *ctx);
+int flb_upstream_set_property(struct flb_config *config,
+                              struct flb_net_setup *net, char *k, char *v);
+int flb_upstream_is_async(struct flb_upstream *u);
+struct mk_list *flb_upstream_get_config_map(struct flb_config *config);
 
 #endif

@@ -88,7 +88,9 @@ void flb_output_pre_run(struct flb_config *config)
 
 static void flb_output_free_properties(struct flb_output_instance *ins)
 {
+
     flb_kv_release(&ins->properties);
+    flb_kv_release(&ins->net_properties);
 
 #ifdef FLB_HAVE_TLS
     if (ins->tls_vhost) {
@@ -157,6 +159,10 @@ int flb_output_instance_destroy(struct flb_output_instance *ins)
     /* destroy config map */
     if (ins->config_map) {
         flb_config_map_destroy(ins->config_map);
+    }
+
+    if (ins->net_config_map) {
+        flb_config_map_destroy(ins->net_config_map);
     }
 
     /* release properties */
@@ -266,6 +272,8 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     }
     instance->config = config;
     instance->log_level = -1;
+    instance->test_mode = FLB_FALSE;
+
     /*
      * Set mask_id: the mask_id is an unique number assigned to this
      * output instance that is used later to set in an 'unsigned 64
@@ -323,6 +331,10 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     instance->retry_limit = 1;
     instance->host.name   = NULL;
     instance->host.address = NULL;
+    instance->net_config_map = NULL;
+
+    /* Storage */
+    instance->total_limit_size = -1;
 
     /* Parent plugin flags */
     flags = instance->flags;
@@ -338,13 +350,8 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
         instance->flags |= FLB_IO_TLS;
     }
 
-    /* Keepalive feature to reuse Upstream connections */
-    instance->keepalive = FLB_FALSE;
-    instance->keepalive_timeout = FLB_OUTPUT_KA_TIMEOUT;
-
 #ifdef FLB_HAVE_TLS
     instance->tls.context           = NULL;
-    instance->tls.handshake_timeout = FLB_UPSTREAM_TLS_HANDSHAKE_TIMEOUT;
     instance->tls_debug             = -1;
     instance->tls_verify            = FLB_TRUE;
     instance->tls_vhost             = NULL;
@@ -364,7 +371,11 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     }
 
     flb_kv_init(&instance->properties);
+    flb_kv_init(&instance->net_properties);
     mk_list_add(&instance->_head, &config->outputs);
+
+    /* Tests */
+    instance->test_formatter.callback = plugin->test_formatter.callback;
 
     return instance;
 }
@@ -387,11 +398,13 @@ int flb_output_set_property(struct flb_output_instance *ins,
 {
     int len;
     int ret;
+    ssize_t limit;
     flb_sds_t tmp;
     struct flb_kv *kv;
+    struct flb_config *config = ins->config;
 
     len = strlen(k);
-    tmp = flb_env_var_translate(ins->config->env, v);
+    tmp = flb_env_var_translate(config->env, v);
     if (tmp) {
         if (strlen(tmp) == 0) {
             flb_sds_destroy(tmp);
@@ -432,24 +445,6 @@ int flb_output_set_property(struct flb_output_instance *ins,
             ins->host.port = 0;
         }
     }
-    else if (prop_key_check("keepalive", k, len) == 0) {
-        if (tmp) {
-            ins->keepalive = flb_utils_bool(tmp);
-            flb_sds_destroy(tmp);
-        }
-        else {
-            ins->keepalive = FLB_FALSE;
-        }
-    }
-    else if (prop_key_check("keepalive_timeout", k, len) == 0) {
-        if (tmp) {
-            ins->keepalive_timeout = atoi(tmp);
-            flb_sds_destroy(tmp);
-        }
-        else {
-            ins->keepalive_timeout = 10;
-        }
-    }
     else if (prop_key_check("ipv6", k, len) == 0 && tmp) {
         ins->host.ipv6 = flb_utils_bool(tmp);
         flb_sds_destroy(tmp);
@@ -469,6 +464,16 @@ int flb_output_set_property(struct flb_output_instance *ins,
         else {
             ins->retry_limit = 0;
         }
+    }
+    else if (strncasecmp("net.", k, 4) == 0 && tmp) {
+        kv = flb_kv_item_create(&ins->net_properties, (char *) k, NULL);
+        if (!kv) {
+            if (tmp) {
+                flb_sds_destroy(tmp);
+            }
+            return -1;
+        }
+        kv->val = tmp;
     }
 #ifdef FLB_HAVE_HTTP_CLIENT_DEBUG
     else if (strncasecmp("_debug.http.", k, 12) == 0 && tmp) {
@@ -537,11 +542,30 @@ int flb_output_set_property(struct flb_output_instance *ins,
     else if (prop_key_check("tls.key_passwd", k, len) == 0) {
         ins->tls_key_passwd = tmp;
     }
-    else if (prop_key_check("tls.handshake_timeout", k, len) == 0 && tmp) {
-        ins->tls.handshake_timeout = atoi(tmp);
-        flb_sds_destroy(tmp);
-    }
 #endif
+    else if (prop_key_check("storage.total_limit_size", k, len) == 0 && tmp) {
+        if (strcasecmp(tmp, "off") == 0 ||
+            flb_utils_bool(tmp) == FLB_FALSE) {
+            /* no limit for filesystem storage */
+            limit = -1;
+            flb_info("[config] unlimited filesystem buffer for %s plugin",
+                     ins->name);
+        }
+        else {
+            limit = flb_utils_size_to_bytes(tmp);
+            if (limit == -1) {
+                flb_sds_destroy(tmp);
+                return -1;
+            }
+
+            if (limit == 0) {
+                limit = -1;
+            }
+        }
+
+        flb_sds_destroy(tmp);
+        ins->total_limit_size = (size_t) limit;
+    }
     else {
         /*
          * Create the property, we don't pass the value since we will
@@ -608,6 +632,7 @@ int flb_output_init_all(struct flb_config *config)
             ins->log_level = config->log->level;
         }
         p = ins->p;
+        mk_list_init(&ins->th_queue);
 
         /* Metrics */
 #ifdef FLB_HAVE_METRICS
@@ -688,9 +713,33 @@ int flb_output_init_all(struct flb_config *config)
             }
         }
 
+        /* Get Upstream net_setup configmap */
+        ins->net_config_map = flb_upstream_get_config_map(config);
+        if (!ins->net_config_map) {
+            flb_output_instance_destroy(ins);
+            return -1;
+        }
+
+        /*
+         * Validate 'net.*' properties: if the plugin use the Upstream interface,
+         * it might receive some networking settings.
+         */
+        if (mk_list_size(&ins->net_properties) > 0) {
+            ret = flb_config_map_properties_check(ins->p->name,
+                                                  &ins->net_properties,
+                                                  ins->net_config_map);
+            if (ret == -1) {
+                if (config->program_name) {
+                    flb_helper("try the command: %s -o %s -h\n",
+                               config->program_name, ins->p->name);
+                }
+                flb_output_instance_destroy(ins);
+                return -1;
+            }
+        }
+
         /* Initialize plugin through it 'init callback' */
         ret = p->cb_init(ins, config, ins->data);
-        mk_list_init(&ins->th_queue);
         if (ret == -1) {
             flb_error("[output] Failed to initialize '%s' plugin",
                       p->name);
@@ -747,16 +796,11 @@ int flb_output_upstream_set(struct flb_upstream *u, struct flb_output_instance *
         flags |= FLB_IO_IPV6;
     }
 
-    /* KeepAlive */
-    if (ins->keepalive == FLB_TRUE) {
-        flags |= FLB_IO_TCP_KA;
-
-        /* Keepalive timeout */
-        u->ka_timeout = ins->keepalive_timeout;
-    }
-
     /* Set flags */
     u->flags |= flags;
+
+    /* Set networking options 'net.*' received through instance properties */
+    memcpy(&u->net, &ins->net_setup, sizeof(struct flb_net_setup));
     return 0;
 }
 
