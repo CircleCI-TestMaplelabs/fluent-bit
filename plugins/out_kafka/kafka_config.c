@@ -118,6 +118,15 @@ struct flb_kafka *flb_kafka_conf_create(struct flb_output_instance *ins,
         ctx->topic_key = NULL;
     }
 
+    /* Config: dynamic_topic */
+    tmp = flb_output_get_property("dynamic_topic", ins);
+    if (tmp) {
+        ctx->dynamic_topic = flb_utils_bool(tmp);
+    }
+    else {
+        ctx->dynamic_topic = FLB_FALSE;
+    }
+
     /* Config: Format */
     tmp = flb_output_get_property("format", ins);
     if (tmp) {
@@ -174,6 +183,19 @@ struct flb_kafka *flb_kafka_conf_create(struct flb_output_instance *ins,
     if (tmp) {
         if (strcasecmp(tmp, "iso8601") == 0) {
             ctx->timestamp_format = FLB_JSON_DATE_ISO8601;
+        }
+    }
+
+    /* Config: queue_full_retries */
+    tmp = flb_output_get_property("queue_full_retries", ins);
+    if (!tmp) {
+        ctx->queue_full_retries = FLB_KAFKA_QUEUE_FULL_RETRIES;
+    }
+    else {
+        /* set number of retries: note that if the number is zero, means forever */
+        ctx->queue_full_retries = atoi(tmp);
+        if (ctx->queue_full_retries < 0) {
+            ctx->queue_full_retries = 0;
         }
     }
 

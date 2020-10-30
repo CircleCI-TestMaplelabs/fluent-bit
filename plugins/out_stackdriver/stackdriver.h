@@ -46,6 +46,32 @@
 /* Default Resource type */
 #define FLB_SDS_RESOURCE_TYPE "global"
 
+#define OPERATION_FIELD_IN_JSON "logging.googleapis.com/operation"
+#define MONITORED_RESOURCE_KEY "logging.googleapis.com/monitored_resource"
+#define LOCAL_RESOURCE_ID_KEY "logging.googleapis.com/local_resource_id"
+#define DEFAULT_LABELS_KEY "logging.googleapis.com/labels"
+#define DEFAULT_INSERT_ID_KEY "logging.googleapis.com/insertId"
+#define SOURCELOCATION_FIELD_IN_JSON "logging.googleapis.com/sourceLocation"
+#define HTTPREQUEST_FIELD_IN_JSON "logging.googleapis.com/http_request"
+#define INSERT_ID_SIZE 31
+#define LEN_LOCAL_RESOURCE_ID_KEY 40
+#define OPERATION_KEY_SIZE 32
+#define SOURCE_LOCATION_SIZE 37
+#define HTTP_REQUEST_KEY_SIZE 35
+
+#define K8S_CONTAINER "k8s_container"
+#define K8S_NODE      "k8s_node"
+#define K8S_POD       "k8s_pod"
+
+#define STREAM_STDOUT 1
+#define STREAM_STDERR 2
+#define STREAM_UNKNOWN 3
+
+#define STDOUT "stdout"
+#define STDERR "stderr"
+
+#define DEFAULT_TAG_REGEX "(?<pod_name>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?(?:\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*)_(?<namespace_name>[^_]+)_(?<container_name>.+)-(?<docker_id>[a-z0-9]{64})\\.log$"
+
 struct flb_stackdriver {
     /* credentials */
     flb_sds_t credentials_file;
@@ -65,6 +91,19 @@ struct flb_stackdriver {
     flb_sds_t zone;
     flb_sds_t instance_id;
     flb_sds_t instance_name;
+
+    /* kubernetes specific */
+    flb_sds_t cluster_name;
+    flb_sds_t cluster_location;
+    flb_sds_t namespace_name;
+    flb_sds_t pod_name;
+    flb_sds_t container_name;
+    flb_sds_t node_name;
+    bool k8s_resource_type;
+
+    flb_sds_t labels_key;
+    flb_sds_t local_resource_id;
+    flb_sds_t tag_prefix;
 
     /* other */
     flb_sds_t resource;
@@ -97,5 +136,16 @@ typedef enum {
     FLB_STD_DEBUG     = 100,
     FLB_STD_DEFAULT   = 0
 } severity_t;
+
+struct local_resource_id_list {
+    flb_sds_t val;
+    struct mk_list _head;
+};
+
+typedef enum {
+    INSERTID_VALID = 0,
+    INSERTID_INVALID = 1,
+    INSERTID_NOT_PRESENT = 2
+} insert_id_status;
 
 #endif

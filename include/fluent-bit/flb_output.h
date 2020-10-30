@@ -49,12 +49,78 @@
 #endif
 
 /* Output plugin masks */
-#define FLB_OUTPUT_NET          32  /* output address may set host and port */
-#define FLB_OUTPUT_PLUGIN_CORE   0
-#define FLB_OUTPUT_PLUGIN_PROXY  1
-#define FLB_OUTPUT_KA_TIMEOUT   30
+#define FLB_OUTPUT_NET           32  /* output address may set host and port */
+#define FLB_OUTPUT_PLUGIN_CORE    0
+#define FLB_OUTPUT_PLUGIN_PROXY   1
+#define FLB_OUTPUT_NO_MULTIPLEX 512
 
-struct flb_output_instance;
+/*
+ * Tests callbacks
+ * ===============
+ */
+struct flb_test_out_formatter {
+    /*
+     * Runtime Library Mode
+     * ====================
+     * When the runtime library enable the test formatter mode, it needs to
+     * keep a reference of the context and other information:
+     *
+     * - rt_ctx : context created by flb_create()
+     *
+     * - rt_ffd : this plugin assigned 'integer' created by flb_output()
+     *
+     * - rt_step_calback: intermediary function to receive the results of
+     *                    the formatter plugin test function.
+     *
+     * - rt_data: opaque data type for rt_step_callback()
+     */
+
+    /* runtime library context */
+    void *rt_ctx;
+
+    /* runtime library: assigned plugin integer */
+    int rt_ffd;
+
+    /*
+     * "runtime step callback": this function pointer is used by Fluent Bit
+     * library mode to reference a test function that must retrieve the
+     * results of 'callback'. Consider this an intermediary function to
+     * transfer the results to the runtime test.
+     *
+     * This function is private and should not be set manually in the plugin
+     * code, it's set on src/flb_lib.c .
+     */
+    void (*rt_out_callback) (void *, int, int, void *, size_t, void *);
+
+    /*
+     * opaque data type passed by the runtime library to be used on
+     * rt_step_test().
+     */
+    void *rt_data;
+
+    /* optional context for flush callback */
+    void *flush_ctx;
+
+    /*
+     * Callback
+     * =========
+     * "Formatter callback": it references the plugin function that performs
+     * data formatting (msgpack -> local data). This entry is mostly to
+     * expose the plugin local function.
+     */
+    int (*callback) (/* Fluent Bit context */
+                     struct flb_config *,
+                     /* plugin that ingested the records */
+                     struct flb_input_instance *,
+                     void *,       /* plugin instance context */
+                     void *,       /* optional flush context */
+                     const char *, /* tag        */
+                     int,          /* tag length */
+                     const void *, /* incoming msgpack data */
+                     size_t,       /* incoming msgpack size */
+                     void **,      /* output buffer      */
+                     size_t *);    /* output buffer size */
+};
 
 struct flb_output_plugin {
     /*
@@ -107,6 +173,9 @@ struct flb_output_plugin {
     /* Exit */
     int (*cb_exit) (void *, struct flb_config *);
 
+    /* Tests */
+    struct flb_test_out_formatter test_formatter;
+
     /* Link to global list from flb_config->outputs */
     struct mk_list _head;
 };
@@ -125,6 +194,7 @@ struct flb_output_instance {
     char name[32];                       /* numbered name (cpu -> cpu.0) */
     char *alias;                         /* alias name for the instance  */
     int flags;                           /* inherit flags from plugin    */
+    int test_mode;                       /* running tests? (default:off) */
     struct flb_output_plugin *p;         /* original plugin              */
     void *context;                       /* plugin configuration context */
 
@@ -164,10 +234,6 @@ struct flb_output_instance {
      */
     struct flb_net_host host;
 
-    /* KeepAlive support for networking operations */
-    int keepalive;
-    int keepalive_timeout;
-
     /*
      * Optional data passed to the plugin, this info is useful when
      * running Fluent Bit in library mode and the target plugin needs
@@ -199,7 +265,7 @@ struct flb_output_instance {
      * through the command line arguments. This list is validated by the
      * plugin.
      */
-    struct mk_list  properties;
+    struct mk_list properties;
 
     /*
      * configuration map: a new API is landing on Fluent Bit v1.4 that allows
@@ -211,6 +277,11 @@ struct flb_output_instance {
      */
     struct mk_list *config_map;
 
+    /* General network options like timeouts and keepalive */
+    struct flb_net_setup net_setup;
+    struct mk_list *net_config_map;
+    struct mk_list net_properties;
+
     struct mk_list _head;                /* link to config->inputs       */
 
 #ifdef FLB_HAVE_METRICS
@@ -219,6 +290,24 @@ struct flb_output_instance {
 
     /* Callbacks context */
     struct flb_callback *callback;
+
+    /* Tests */
+    struct flb_test_out_formatter test_formatter;
+
+    /*
+     * Buffer counter: it counts the total of disk space (filesystem) used by buffers
+     */
+    size_t fs_chunks_size;
+
+    /*
+     * Buffer limit: optional limit set by configuration so this output instance
+     * cannot buffer more than total_limit_size (bytes unit).
+     *
+     * Note that this is the limit set to the filesystem buffer mechanism so the
+     * input instance routered to this output plugin should configure to use
+     * filesystem as buffer type.
+     */
+    size_t total_limit_size;
 
     /* Keep a reference to the original context this instance belongs to */
     struct flb_config *config;
@@ -231,7 +320,9 @@ struct flb_output_thread {
     struct flb_config *config;         /* FLB context        */
     struct flb_output_instance *o_ins; /* output instance    */
     struct flb_thread *parent;         /* parent thread addr */
-    struct mk_list _head;              /* Link to struct flb_task->threads */
+    struct mk_list _head_output;       /* Link to flb_output_instance->th_queue */
+    struct mk_list _head;              /* Link to flb_task->threads */
+
 };
 
 static FLB_INLINE
@@ -260,6 +351,7 @@ static FLB_INLINE int flb_output_thread_destroy_id(int id, struct flb_task *task
         return -1;
     }
 
+    mk_list_del(&out_th->_head_output);
     mk_list_del(&out_th->_head);
     thread = out_th->parent;
 
@@ -279,6 +371,7 @@ static FLB_INLINE void cb_output_thread_destroy(void *data)
     flb_debug("[out thread] cb_destroy thread_id=%i", out_th->id);
 
     out_th->task->users--;
+    mk_list_del(&out_th->_head_output);
     mk_list_del(&out_th->_head);
 }
 
@@ -423,6 +516,8 @@ struct flb_thread *flb_output_thread(struct flb_task *task,
                                                     ((char *)th->callee) + stack_size);
 #endif
 
+    mk_list_add(&out_th->_head_output, &o_ins->th_queue);
+
     /* Workaround for makecontext() */
     output_params_set(th,
                       buf,
@@ -477,7 +572,7 @@ static inline void flb_output_return(int ret, struct flb_thread *th) {
 #ifdef FLB_HAVE_METRICS
     if (out_th->o_ins->metrics) {
         if (ret == FLB_OK) {
-            records = flb_mp_count(task->buf, task->size);
+            records = task->records;
             flb_metrics_sum(FLB_METRIC_OUT_OK_RECORDS, records,
                             out_th->o_ins->metrics);
             flb_metrics_sum(FLB_METRIC_OUT_OK_BYTES, task->size,
@@ -515,7 +610,20 @@ static inline void flb_output_return_do(int x)
 static inline int flb_output_config_map_set(struct flb_output_instance *ins,
                                             void *context)
 {
-    return flb_config_map_set(&ins->properties, ins->config_map, context);
+    int ret;
+
+    /* Process normal properties */
+    ret = flb_config_map_set(&ins->properties, ins->config_map, context);
+    if (ret == -1) {
+        return -1;
+    }
+
+    /* Net properties */
+    if (ins->net_config_map) {
+        ret = flb_config_map_set(&ins->net_properties, ins->net_config_map,
+                                 &ins->net_setup);
+    }
+    return ret;
 }
 
 struct flb_output_instance *flb_output_new(struct flb_config *config,

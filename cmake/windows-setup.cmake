@@ -9,9 +9,7 @@ set(FLB_LUAJIT                Yes)
 set(FLB_EXAMPLES              Yes)
 set(FLB_PARSER                Yes)
 set(FLB_TLS                   Yes)
-
-# Windows does not support strptime(3)
-set(FLB_SYSTEM_STRPTIME        No)
+set(FLB_AWS                   Yes)
 
 # INPUT plugins
 # =============
@@ -44,16 +42,17 @@ set(FLB_IN_EMITTER            Yes)
 
 # OUTPUT plugins
 # ==============
-set(FLB_OUT_AZURE              No)
+set(FLB_OUT_AZURE             Yes)
+set(FLB_OUT_AZURE_BLOB        Yes)
 set(FLB_OUT_BIGQUERY           No)
 set(FLB_OUT_COUNTER           Yes)
 set(FLB_OUT_DATADOG           Yes)
 set(FLB_OUT_ES                Yes)
 set(FLB_OUT_EXIT               No)
 set(FLB_OUT_FORWARD           Yes)
-set(FLB_OUT_GELF               No)
+set(FLB_OUT_GELF              Yes)
 set(FLB_OUT_HTTP              Yes)
-set(FLB_OUT_INFLUXDB           No)
+set(FLB_OUT_INFLUXDB          Yes)
 set(FLB_OUT_NATS               No)
 set(FLB_OUT_PLOT               No)
 set(FLB_OUT_FILE              Yes)
@@ -67,6 +66,9 @@ set(FLB_OUT_NULL              Yes)
 set(FLB_OUT_FLOWCOUNTER       Yes)
 set(FLB_OUT_KAFKA              No)
 set(FLB_OUT_KAFKA_REST         No)
+set(FLB_OUT_CLOUDWATCH_LOGS   Yes)
+set(FLB_OUT_S3                 No)
+set(FLB_OUT_KINESIS_FIREHOSE   No)
 
 # FILTER plugins
 # ==============
@@ -76,6 +78,7 @@ set(FLB_FILTER_STDOUT         Yes)
 set(FLB_FILTER_PARSER         Yes)
 set(FLB_FILTER_KUBERNETES     Yes)
 set(FLB_FILTER_THROTTLE       Yes)
+set(FLB_FILTER_THROTTLE_SIZE  Yes)
 set(FLB_FILTER_NEST           Yes)
 set(FLB_FILTER_LUA            Yes)
 set(FLB_FILTER_RECORD_MODIFIER Yes)

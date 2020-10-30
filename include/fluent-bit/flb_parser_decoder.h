@@ -33,6 +33,7 @@
 #define FLB_PARSER_DEC_JSON          0  /* decode_json()    */
 #define FLB_PARSER_DEC_ESCAPED       1  /* decode_escaped() */
 #define FLB_PARSER_DEC_ESCAPED_UTF8  2  /* decode_escaped_utf8() */
+#define FLB_PARSER_DEC_MYSQL_QUOTED  3  /* decode_mysql_quoted() */
 
 /* Decoder actions */
 #define FLB_PARSER_ACT_NONE     0
@@ -52,7 +53,7 @@ struct flb_parser_dec_rule {
 
 struct flb_parser_dec {
     flb_sds_t key;
-    flb_sds_t buffer;        /* temporal buffer for decoding work */
+    flb_sds_t buffer;        /* temporary buffer for decoding work */
     int add_extra_keys;      /* if type == FLB_PARSER_DEC_DEFAULT, flag is True */
     struct mk_list rules;    /* list head for decoder key rules */
     struct mk_list _head;    /* link to parser->decoders */

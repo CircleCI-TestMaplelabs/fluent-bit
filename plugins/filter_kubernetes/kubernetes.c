@@ -35,7 +35,7 @@
 #include <msgpack.h>
 
 /* Merge status used by merge_log_handler() */
-#define MERGE_NONE        0 /* merge unescaped string in temporal buffer */
+#define MERGE_NONE        0 /* merge unescaped string in temporary buffer */
 #define MERGE_PARSED      1 /* merge parsed string (log_buf)             */
 #define MERGE_MAP         2 /* merge direct binary object (v)            */
 
@@ -131,7 +131,7 @@ static int merge_log_handler(msgpack_object o,
         ret = flb_parser_do(parser, ctx->unesc_buf, ctx->unesc_buf_len,
                             out_buf, out_size, log_time);
         if (ret >= 0) {
-            if (flb_time_to_double(log_time) == 0) {
+            if (flb_time_to_double(log_time) == 0.0) {
                 flb_time_get(log_time);
             }
             return MERGE_PARSED;
@@ -142,7 +142,7 @@ static int merge_log_handler(msgpack_object o,
                             ctx->unesc_buf, ctx->unesc_buf_len,
                             out_buf, out_size, log_time);
         if (ret >= 0) {
-            if (flb_time_to_double(log_time) == 0) {
+            if (flb_time_to_double(log_time) == 0.0) {
                 flb_time_get(log_time);
             }
             return MERGE_PARSED;
@@ -246,7 +246,7 @@ static int pack_map_content(msgpack_packer *pck, msgpack_sbuffer *sbuf,
 
     /*
      * If a log_index exists, the application log content inside the
-     * Docker JSON map is a escaped string. Proceed to reserve a temporal
+     * Docker JSON map is a escaped string. Proceed to reserve a temporary
      * buffer and create an unescaped version.
      */
     if (log_index != -1) {
@@ -468,7 +468,7 @@ static int cb_kube_filter(const void *data, size_t bytes,
         }
     }
 
-    /* Create temporal msgpack buffer */
+    /* Create temporary msgpack buffer */
     msgpack_sbuffer_init(&tmp_sbuf);
     msgpack_packer_init(&tmp_pck, &tmp_sbuf, msgpack_sbuffer_write);
 
@@ -784,6 +784,22 @@ static struct flb_config_map config_map[] = {
      FLB_CONFIG_MAP_BOOL, "dummy_meta", "false",
      0, FLB_TRUE, offsetof(struct flb_kube, dummy_meta),
      "use 'dummy' metadata, do not talk to API server"
+    },
+
+    /*
+     * Poll DNS status to mitigate unreliable network issues.
+     * See fluent/fluent-bit/2144.
+     */
+    {
+     FLB_CONFIG_MAP_INT, "dns_retries", "6",
+     0, FLB_TRUE, offsetof(struct flb_kube, dns_retries),
+     "dns lookup retries N times until the network start working"
+    },
+
+    {
+     FLB_CONFIG_MAP_TIME, "dns_wait_time", "30",
+     0, FLB_TRUE, offsetof(struct flb_kube, dns_wait_time),
+     "dns interval between network status checks"
     },
 
     /* EOF */

@@ -35,6 +35,8 @@
 #include <fluent-bit/flb_storage.h>
 #include <fluent-bit/flb_kv.h>
 
+struct flb_libco_in_params libco_in_param;
+
 #define protcmp(a, b)  strncasecmp(a, b, strlen(a))
 
 static int check_protocol(const char *prot, const char *output)
@@ -42,7 +44,7 @@ static int check_protocol(const char *prot, const char *output)
     int len;
 
     len = strlen(prot);
-    if (len > strlen(output)) {
+    if (len != strlen(output)) {
         return 0;
     }
 
@@ -742,7 +744,7 @@ int flb_input_collector_start(int coll_id, struct flb_input_instance *in)
             ret = collector_start(coll, in->config);
             if (ret == -1) {
                 flb_error("[input] error starting collector #%i: %s",
-                          in->name);
+                          coll_id, in->name);
             }
             return ret;
         }
@@ -793,6 +795,7 @@ int flb_input_collector_running(int coll_id, struct flb_input_instance *in)
 
     return coll->running;
 }
+
 
 int flb_input_pause_all(struct flb_config *config)
 {
@@ -876,6 +879,11 @@ int flb_input_collector_resume(int coll_id, struct flb_input_instance *in)
     config = in->config;
     event = &coll->event;
 
+    /* If data ingestion has been paused, the collector cannot resume */
+    if (config->is_ingestion_active == FLB_FALSE) {
+        return 0;
+    }
+
     if (coll->type == FLB_COLLECT_TIME) {
         event->mask = MK_EVENT_EMPTY;
         event->status = MK_EVENT_NONE;
@@ -935,7 +943,7 @@ int flb_input_set_collector_socket(struct flb_input_instance *in,
     mk_list_add(&collector->_head, &config->collectors);
     mk_list_add(&collector->_head_ins, &in->collectors);
 
-    return 0;
+    return collector->id;
 }
 
 int flb_input_collector_fd(flb_pipefd_t fd, struct flb_config *config)

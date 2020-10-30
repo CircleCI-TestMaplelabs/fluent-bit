@@ -38,7 +38,6 @@ struct flb_kafka_rest {
 
     /* Path */
     char *path;
-
     /* Auth Token */
     char *token;
     size_t token_len;

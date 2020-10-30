@@ -26,6 +26,7 @@
 #include <fluent-bit/flb_pipe.h>
 #include <fluent-bit/flb_engine.h>
 #include <fluent-bit/flb_engine_dispatch.h>
+#include <fluent-bit/flb_random.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -44,7 +45,11 @@ static inline int consume_byte(flb_pipefd_t fd)
 
     /* We need to consume the byte */
     ret = flb_pipe_r(fd, &val, sizeof(val));
+#ifdef __APPLE__
+    if (ret < 0) {
+#else
     if (ret <= 0) {
+#endif
         flb_errno();
         return -1;
     }
@@ -61,27 +66,15 @@ static inline int consume_byte(flb_pipefd_t fd)
 static int random_uniform(int min, int max)
 {
     int val;
-    int fd;
     int range;
     int copies;
     int limit;
     int ra;
-    int ret;
 
-    fd = open("/dev/urandom", O_RDONLY);
-    if (fd == -1) {
-        srand(time(NULL));
+    if (flb_random_bytes((unsigned char *) &val, sizeof(int))) {
+        val = time(NULL);
     }
-    else {
-        ret = read(fd, &val, sizeof(val));
-        if (ret > 0) {
-            srand(val);
-        }
-        else {
-            srand(time(NULL));
-        }
-        close(fd);
-    }
+    srand(val);
 
     range  = max - min + 1;
     copies = (RAND_MAX / range);
@@ -323,8 +316,10 @@ int flb_sched_request_destroy(struct flb_config *config,
      */
     flb_sched_timer_invalidate(timer);
 
+#ifndef FLB_SYSTEM_WINDOWS
     /* Close pipe after invalidating timer */
     flb_pipe_close(req->fd);
+#endif
 
     /* Remove request */
     flb_free(req);
@@ -341,6 +336,23 @@ int flb_sched_request_invalidate(struct flb_config *config, void *data)
 
     sched = config->sched;
     mk_list_foreach_safe(head, tmp, &sched->requests) {
+        request = mk_list_entry(head, struct flb_sched_request, _head);
+        if (request->data == data) {
+            flb_sched_request_destroy(config, request);
+            return 0;
+        }
+    }
+
+    /*
+     *  Clean up retry tasks that are scheduled more than 60s.
+     *  Task might be destroyed when there are still retry 
+     *  scheduled but no thread is running for the task.
+     * 
+     *  We need to drop buffered chunks when the filesystem buffer
+     *  limit is reached. We need to make sure that all requests
+     *  should be destroyed to avoid invoke an invlidated request.
+     */
+    mk_list_foreach_safe(head, tmp, &sched->requests_wait) {
         request = mk_list_entry(head, struct flb_sched_request, _head);
         if (request->data == data) {
             flb_sched_request_destroy(config, request);
@@ -381,11 +393,15 @@ int flb_sched_event_handler(struct flb_config *config, struct mk_event *event)
 #endif
         schedule_request_promote(sched);
     }
-    else if (timer->type == FLB_SCHED_TIMER_CUSTOM) {
+    else if (timer->type == FLB_SCHED_TIMER_CB_ONESHOT) {
         consume_byte(timer->timer_fd);
         flb_sched_timer_cb_disable(timer);
         timer->cb(config, timer->data);
         flb_sched_timer_cb_destroy(timer);
+    }
+    else if (timer->type == FLB_SCHED_TIMER_CB_PERM) {
+        consume_byte(timer->timer_fd);
+        timer->cb(config, timer->data);
     }
 
     return 0;
@@ -398,7 +414,7 @@ int flb_sched_event_handler(struct flb_config *config, struct mk_event *event)
  *
  * use-case: invoke function A() after M milliseconds.
  */
-int flb_sched_timer_cb_create(struct flb_config *config, int ms,
+int flb_sched_timer_cb_create(struct flb_config *config, int type, int ms,
                               void (*cb)(struct flb_config *, void *),
                               void *data)
 {
@@ -408,12 +424,17 @@ int flb_sched_timer_cb_create(struct flb_config *config, int ms,
     struct mk_event *event;
     struct flb_sched_timer *timer;
 
+    if (type != FLB_SCHED_TIMER_CB_ONESHOT && type != FLB_SCHED_TIMER_CB_PERM) {
+        flb_error("[sched] invalid callback timer type %i", type);
+        return -1;
+    }
+
     timer = flb_sched_timer_create(config->sched);
     if (!timer) {
         return -1;
     }
 
-    timer->type = FLB_SCHED_TIMER_CUSTOM;
+    timer->type = type;
     timer->data = data;
     timer->cb   = cb;
 

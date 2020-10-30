@@ -190,6 +190,10 @@ flb_ctx_t *flb_create()
 /* Release resources associated to the library context */
 void flb_destroy(flb_ctx_t *ctx)
 {
+    if (!ctx) {
+        return;
+    }
+
     if (ctx->event_channel) {
         mk_event_del(ctx->event_loop, ctx->event_channel);
         flb_free(ctx->event_channel);
@@ -198,6 +202,7 @@ void flb_destroy(flb_ctx_t *ctx)
     /* Remove resources from the event loop */
     mk_event_loop_destroy(ctx->event_loop);
     flb_free(ctx);
+    ctx = NULL;
 
 #ifdef FLB_HAVE_MTRACE
     /* Stop tracing malloc and free */
@@ -324,6 +329,39 @@ int flb_output_set_callback(flb_ctx_t *ctx, int ffd, char *name,
     return flb_callback_set(o_ins->callback, name, cb);
 }
 
+int flb_output_set_test(flb_ctx_t *ctx, int ffd, char *test_name,
+                        void (*out_callback) (void *, int, int, void *, size_t, void *),
+                        void *out_callback_data,
+                        void *test_ctx)
+{
+    struct flb_output_instance *o_ins;
+
+    o_ins = out_instance_get(ctx, ffd);
+    if (!o_ins) {
+        return -1;
+    }
+
+    /*
+     * Enabling a test, set the output instance in 'test' mode, so no real
+     * flush callback is invoked, only the desired implemented test.
+     */
+
+    /* Formatter test */
+    if (strcmp(test_name, "formatter") == 0) {
+        o_ins->test_mode = FLB_TRUE;
+        o_ins->test_formatter.rt_ctx = ctx;
+        o_ins->test_formatter.rt_ffd = ffd;
+        o_ins->test_formatter.rt_out_callback = out_callback;
+        o_ins->test_formatter.rt_data = out_callback_data;
+        o_ins->test_formatter.flush_ctx = test_ctx;
+    }
+    else {
+        return -1;
+    }
+
+    return 0;
+}
+
 /* Set an filter interface property */
 int flb_filter_set(flb_ctx_t *ctx, int ffd, ...)
 {
@@ -445,7 +483,8 @@ static void flb_lib_worker(void *data)
     int ret;
     struct flb_config *config = data;
 
-    flb_log_init(config, FLB_LOG_STDERR, FLB_LOG_INFO, NULL);
+    mk_utils_worker_rename("flb-pipeline");
+
     ret = flb_engine_start(config);
     if (ret == -1) {
         flb_engine_failed(config);
@@ -505,6 +544,18 @@ int flb_start(flb_ctx_t *ctx)
     }
 
     return 0;
+}
+
+int flb_loop(flb_ctx_t *ctx)
+{
+    int ret;
+    pthread_t tid;
+
+    tid = ctx->config->worker;
+    ret = pthread_join(tid, NULL);
+    flb_debug("[lib] Fluent Bit exiting...");
+
+    return ret;
 }
 
 /* Stop the engine */

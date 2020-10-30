@@ -28,14 +28,14 @@
 #include <fluent-bit/flb_input_plugin.h>
 #include <fluent-bit/flb_utils.h>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <shlwapi.h>
 
 #include "tail.h"
 #include "tail_file.h"
 #include "tail_signal.h"
 #include "tail_config.h"
+
+#include "win32.h"
 
 static int tail_is_excluded(char *path, struct flb_tail_config *ctx)
 {
@@ -79,10 +79,6 @@ static int tail_register_file(const char *target, struct flb_tail_config *ctx)
         return -1;
     }
 
-    if (flb_tail_file_exists(path, ctx) == FLB_TRUE) {
-        return -1;
-    }
-
     return flb_tail_file_append(path, &st, FLB_TAIL_STATIC, ctx);
 }
 
@@ -91,6 +87,9 @@ static int tail_register_file(const char *target, struct flb_tail_config *ctx)
  * supports patterns with "nested" wildcards like below.
  *
  *     tail_scan_pattern("C:\fluent-bit\*\*.txt", ctx);
+ *
+ * On success, the number of files found is returned (zero indicates
+ * "no file found"). On error, -1 is returned.
  */
 static int tail_scan_pattern(const char *path, struct flb_tail_config *ctx)
 {
@@ -135,7 +134,7 @@ static int tail_scan_pattern(const char *path, struct flb_tail_config *ctx)
 
     h = FindFirstFileA(pattern, &data);
     if (h == INVALID_HANDLE_VALUE) {
-        return -1;
+        return 0;  /* none matched */
     }
 
     do {
@@ -179,24 +178,6 @@ static int tail_scan_pattern(const char *path, struct flb_tail_config *ctx)
     return n_added;
 }
 
-static int tail_do_scan(const char *path, struct flb_tail_config *ctx)
-{
-    int ret;
-    int n_added = 0;
-
-    if (strchr(path, '*')) {
-        return tail_scan_pattern(path, ctx);
-    }
-
-    /* No wildcard involved. Let's just handle the file... */
-    ret = tail_register_file(path, ctx);
-    if (ret == 0) {
-        n_added++;
-    }
-
-    return n_added;
-}
-
 static int tail_filepath(char *buf, int len, const char *basedir, const char *filename)
 {
     char drive[_MAX_DRIVE];
@@ -228,32 +209,20 @@ static int tail_filepath(char *buf, int len, const char *basedir, const char *fi
     return 0;
 }
 
-int flb_tail_scan(const char *pattern, struct flb_tail_config *ctx)
+static int tail_scan_path(const char *path, struct flb_tail_config *ctx)
 {
-    int n_added;
+    int ret;
+    int n_added = 0;
 
-    flb_plg_debug(ctx->ins, "scanning path %s", pattern);
-
-    n_added = tail_do_scan(pattern, ctx);
-    if (n_added >= 0) {
-        flb_plg_debug(ctx->ins, "%i files found for '%s'", n_added, pattern);
+    if (strchr(path, '*')) {
+        return tail_scan_pattern(path, ctx);
     }
 
-    return 0;
-}
-
-int flb_tail_scan_callback(struct flb_input_instance *ins,
-                           struct flb_config *config, void *context)
-{
-    struct flb_tail_config *ctx = (struct flb_tail_config *) context;
-    int n_added;
-
-    n_added = tail_do_scan(ctx->path, ctx);
-    if (n_added > 0) {
-        flb_plg_debug(ctx->ins, "%i new files found for '%s'",
-                      n_added, ctx->path);
-        tail_signal_manager(ctx);
+    /* No wildcard involved. Let's just handle the file... */
+    ret = tail_register_file(path, ctx);
+    if (ret == 0) {
+        n_added++;
     }
 
-    return 0;
+    return n_added;
 }

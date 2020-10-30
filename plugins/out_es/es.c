@@ -25,6 +25,7 @@
 #include <fluent-bit/flb_pack.h>
 #include <fluent-bit/flb_time.h>
 #include <fluent-bit/flb_signv4.h>
+#include <fluent-bit/flb_aws_credentials.h>
 #include <msgpack.h>
 
 #include <time.h>
@@ -36,14 +37,15 @@
 
 struct flb_output_plugin out_es_plugin;
 
-#ifdef FLB_HAVE_SIGNV4
-static flb_sds_t add_aws_auth(struct flb_elasticsearch *ctx,
-                              struct flb_http_client *c, char *region)
+static int es_pack_array_content(msgpack_packer *tmp_pck,
+                                 msgpack_object array,
+                                 struct flb_elasticsearch *ctx);
+
+#ifdef FLB_HAVE_AWS
+static flb_sds_t add_aws_auth(struct flb_http_client *c,
+                              struct flb_elasticsearch *ctx)
 {
     flb_sds_t signature = NULL;
-    char *access_key = NULL;
-    char *secret_key = NULL;
-    char *session_token = NULL;
     int ret;
 
     flb_plg_debug(ctx->ins, "Signing request with AWS Sigv4");
@@ -55,35 +57,24 @@ static flb_sds_t add_aws_auth(struct flb_elasticsearch *ctx,
         return NULL;
     }
 
-    /* AWS credentials */
-    access_key = getenv("AWS_ACCESS_KEY_ID");
-    if (!access_key || strlen(access_key) < 1) {
-        flb_plg_error(ctx->ins, "'AWS_ACCESS_KEY_ID' not set");
-        return NULL;
-    }
-
-    secret_key = getenv("AWS_SECRET_ACCESS_KEY");
-    if (!access_key || strlen(access_key) < 1) {
-        flb_plg_error(ctx->ins, "'AWS_SECRET_ACCESS_KEY' not set");
-        return NULL;
-    }
-
-    session_token = getenv("AWS_SESSION_TOKEN");
+    /* AWS Fluent Bit user agent */
+    flb_http_add_header(c, "User-Agent", 10, "aws-fluent-bit-plugin", 21);
 
     signature = flb_signv4_do(c, FLB_TRUE, FLB_TRUE, time(NULL),
-                              access_key, region, "es",
-                              secret_key, session_token);
+                              ctx->aws_region, "es",
+                              0,
+                              ctx->aws_provider);
     if (!signature) {
         flb_plg_error(ctx->ins, "could not sign request with sigv4");
         return NULL;
     }
     return signature;
 }
-#endif /* FLB_HAVE_SIGNV4 */
+#endif /* FLB_HAVE_AWS */
 
-static inline int es_pack_map_content(msgpack_packer *tmp_pck,
-                                      msgpack_object map,
-                                      struct flb_elasticsearch *ctx)
+static int es_pack_map_content(msgpack_packer *tmp_pck,
+                               msgpack_object map,
+                               struct flb_elasticsearch *ctx)
 {
     int i;
     char *ptr_key = NULL;
@@ -145,7 +136,7 @@ static inline int es_pack_map_content(msgpack_packer *tmp_pck,
         msgpack_pack_str(tmp_pck, key_size);
         msgpack_pack_str_body(tmp_pck, ptr_key, key_size);
 
-        /* Release temporal key if was allocated */
+        /* Release temporary key if was allocated */
         if (ptr_key && ptr_key != buf_key) {
             flb_free(ptr_key);
         }
@@ -159,11 +150,49 @@ static inline int es_pack_map_content(msgpack_packer *tmp_pck,
             msgpack_pack_map(tmp_pck, v->via.map.size);
             es_pack_map_content(tmp_pck, *v, ctx);
         }
+        /*
+         * The value can be any data type, if it's an array we need to
+         * pass it to es_pack_array_content.
+         */
+        else if (v->type == MSGPACK_OBJECT_ARRAY) {
+          msgpack_pack_array(tmp_pck, v->via.array.size);
+          es_pack_array_content(tmp_pck, *v, ctx);
+        }
         else {
             msgpack_pack_object(tmp_pck, *v);
         }
     }
+    return 0;
+}
 
+/*
+  * Iterate through the array and sanitize elements.
+  * Mutual recursion with es_pack_map_content.
+  */
+static int es_pack_array_content(msgpack_packer *tmp_pck,
+                                 msgpack_object array,
+                                 struct flb_elasticsearch *ctx)
+{
+    int i;
+    msgpack_object *e;
+
+    for (i = 0; i < array.via.array.size; i++) {
+        e = &array.via.array.ptr[i];
+        if (e->type == MSGPACK_OBJECT_MAP)
+        {
+            msgpack_pack_map(tmp_pck, e->via.map.size);
+            es_pack_map_content(tmp_pck, *e, ctx);
+        }
+        else if (e->type == MSGPACK_OBJECT_ARRAY)
+        {
+            msgpack_pack_array(tmp_pck, e->via.array.size);
+            es_pack_array_content(tmp_pck, *e, ctx);
+        }
+        else
+        {
+            msgpack_pack_object(tmp_pck, *e);
+        }
+    }
     return 0;
 }
 
@@ -173,9 +202,13 @@ static inline int es_pack_map_content(msgpack_packer *tmp_pck,
  *
  * 'Sadly' this process involves to convert from Msgpack to JSON.
  */
-static char *elasticsearch_format(const void *data, size_t bytes,
-                                  const char *tag, int tag_len, int *out_size,
-                                  struct flb_elasticsearch *ctx)
+static int elasticsearch_format(struct flb_config *config,
+                                struct flb_input_instance *ins,
+                                void *plugin_context,
+                                void *flush_ctx,
+                                const char *tag, int tag_len,
+                                const void *data, size_t bytes,
+                                void **out_data, size_t *out_size)
 {
     int ret;
     int len;
@@ -184,7 +217,6 @@ static char *elasticsearch_format(const void *data, size_t bytes,
     size_t s = 0;
     size_t off = 0;
     char *p;
-    char *buf;
     char *es_index;
     char logstash_index[256];
     char time_formatted[256];
@@ -207,6 +239,7 @@ static char *elasticsearch_format(const void *data, size_t bytes,
     int i;
     msgpack_object key;
     msgpack_object val;
+    struct flb_elasticsearch *ctx = plugin_context;
 
     /* Iterate the original buffer and perform adjustments */
     msgpack_unpacked_init(&result);
@@ -215,7 +248,7 @@ static char *elasticsearch_format(const void *data, size_t bytes,
     ret = msgpack_unpack_next(&result, data, bytes, &off);
     if (ret != MSGPACK_UNPACK_SUCCESS) {
         msgpack_unpacked_destroy(&result);
-        return NULL;
+        return -1;
     }
 
     /* We 'should' get an array */
@@ -225,18 +258,18 @@ static char *elasticsearch_format(const void *data, size_t bytes,
          * doing, we just duplicate the content in a new buffer and cleanup.
          */
         msgpack_unpacked_destroy(&result);
-        return NULL;
+        return -1;
     }
 
     root = result.data;
     if (root.via.array.size == 0) {
-        return NULL;
+        return -1;
     }
 
     /* Create the bulk composer */
     bulk = es_bulk_create();
     if (!bulk) {
-        return NULL;
+        return -1;
     }
 
     off = 0;
@@ -297,13 +330,6 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             flb_time_pop_from_msgpack(&tms, &result, &obj);
         }
 
-        /*
-         * Timestamp: Elasticsearch only support fractional seconds in
-         * milliseconds unit, not nanoseconds, so we take our nsec value and
-         * change it representation.
-         */
-        tms.tm.tv_nsec = (tms.tm.tv_nsec / 1000000);
-
         map   = root.via.array.ptr[1];
         map_size = map.via.map.size;
 
@@ -336,7 +362,7 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             }
         }
 
-        /* Create temporal msgpack buffer */
+        /* Create temporary msgpack buffer */
         msgpack_sbuffer_init(&tmp_sbuf);
         msgpack_packer_init(&tmp_pck, &tmp_sbuf, msgpack_sbuffer_write);
 
@@ -355,8 +381,14 @@ static char *elasticsearch_format(const void *data, size_t bytes,
         gmtime_r(&tms.tm.tv_sec, &tm);
         s = strftime(time_formatted, sizeof(time_formatted) - 1,
                      ctx->time_key_format, &tm);
-        len = snprintf(time_formatted + s, sizeof(time_formatted) - 1 - s,
-                       ".%03" PRIu64 "Z", (uint64_t) tms.tm.tv_nsec);
+        if (ctx->time_key_nanos) {
+            len = snprintf(time_formatted + s, sizeof(time_formatted) - 1 - s,
+                           ".%09" PRIu64 "Z", (uint64_t) tms.tm.tv_nsec);
+        } else {
+            len = snprintf(time_formatted + s, sizeof(time_formatted) - 1 - s,
+                           ".%03" PRIu64 "Z",
+                           (uint64_t) tms.tm.tv_nsec / 1000000);
+        }
 
         s += len;
         msgpack_pack_str(&tmp_pck, s);
@@ -370,7 +402,6 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             } else {
                 p = logstash_index + flb_sds_len(ctx->logstash_prefix);
             }
-	    /* commented by Upendra */
             //*p++ = '-';
 
             len = p - logstash_index;
@@ -413,7 +444,7 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             msgpack_unpacked_destroy(&result);
             msgpack_sbuffer_destroy(&tmp_sbuf);
             es_bulk_destroy(bulk);
-            return NULL;
+            return -1;
         }
 
         if (ctx->generate_id == FLB_TRUE) {
@@ -434,7 +465,7 @@ static char *elasticsearch_format(const void *data, size_t bytes,
         if (!out_buf) {
             msgpack_unpacked_destroy(&result);
             es_bulk_destroy(bulk);
-            return NULL;
+            return -1;
         }
 
         ret = es_bulk_append(bulk, j_index, index_len,
@@ -445,13 +476,14 @@ static char *elasticsearch_format(const void *data, size_t bytes,
             msgpack_unpacked_destroy(&result);
             *out_size = 0;
             es_bulk_destroy(bulk);
-            return NULL;
+            return -1;
         }
     }
     msgpack_unpacked_destroy(&result);
 
+    /* Set outgoing data */
+    *out_data = bulk->ptr;
     *out_size = bulk->len;
-    buf = bulk->ptr;
 
     /*
      * Note: we don't destroy the bulk as we need to keep the allocated
@@ -460,10 +492,11 @@ static char *elasticsearch_format(const void *data, size_t bytes,
      */
     flb_free(bulk);
     if (ctx->trace_output) {
-        fwrite(buf, 1, *out_size, stdout);
+        fwrite(*out_data, 1, *out_size, stdout);
         fflush(stdout);
     }
-    return buf;
+
+    return 0;
 }
 
 static int cb_es_init(struct flb_output_instance *ins,
@@ -483,6 +516,13 @@ static int cb_es_init(struct flb_output_instance *ins,
                   ctx->index, ctx->type);
 
     flb_output_set_context(ins, ctx);
+
+    /*
+     * This plugin instance uses the HTTP client interface, let's register
+     * it debugging callbacks.
+     */
+    flb_output_set_http_debug_callbacks(ins);
+
     return 0;
 }
 
@@ -586,20 +626,19 @@ static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
 
 static void cb_es_flush(const void *data, size_t bytes,
                         const char *tag, int tag_len,
-                        struct flb_input_instance *i_ins, void *out_context,
+                        struct flb_input_instance *ins, void *out_context,
                         struct flb_config *config)
 {
     int ret;
-    int bytes_out;
+    size_t pack_size;
     char *pack;
+    void *out_buf;
+    size_t out_size;
     size_t b_sent;
     struct flb_elasticsearch *ctx = out_context;
     struct flb_upstream_conn *u_conn;
     struct flb_http_client *c;
     flb_sds_t signature = NULL;
-    (void) i_ins;
-    (void) tag;
-    (void) tag_len;
 
     /* Get upstream connection */
     u_conn = flb_upstream_conn_get(ctx->u);
@@ -608,19 +647,26 @@ static void cb_es_flush(const void *data, size_t bytes,
     }
 
     /* Convert format */
-    pack = elasticsearch_format(data, bytes, tag, tag_len, &bytes_out, ctx);
-    if (!pack) {
+    ret = elasticsearch_format(config, ins,
+                               ctx, NULL,
+                               tag, tag_len,
+                               data, bytes,
+                               &out_buf, &out_size);
+    if (ret != 0) {
         flb_upstream_conn_release(u_conn);
         FLB_OUTPUT_RETURN(FLB_ERROR);
     }
 
+    pack = (char *) out_buf;
+    pack_size = out_size;
+
     /* Compose HTTP Client request */
     c = flb_http_client(u_conn, FLB_HTTP_POST, ctx->uri,
-                        pack, bytes_out, NULL, 0, NULL, 0);
+                        pack, pack_size, NULL, 0, NULL, 0);
 
     flb_http_buffer_size(c, ctx->buffer_size);
 
-#ifndef FLB_HAVE_SIGNV4
+#ifndef FLB_HAVE_AWS
     flb_http_add_header(c, "User-Agent", 10, "Fluent-Bit", 10);
 #endif
 
@@ -630,11 +676,9 @@ static void cb_es_flush(const void *data, size_t bytes,
         flb_http_basic_auth(c, ctx->http_user, ctx->http_passwd);
     }
 
-#ifdef FLB_HAVE_SIGNV4
+#ifdef FLB_HAVE_AWS
     if (ctx->has_aws_auth == FLB_TRUE) {
-        /* User agent for AWS tools must start with "aws-" */
-        flb_http_add_header(c, "User-Agent", 10, "aws-fluent-bit-plugin", 21);
-        signature = add_aws_auth(ctx, c, ctx->aws_region);
+        signature = add_aws_auth(c, ctx);
         if (!signature) {
             goto retry;
         }
@@ -745,16 +789,31 @@ static struct flb_config_map config_map[] = {
     },
 
     /* AWS Authentication */
-#ifdef FLB_HAVE_SIGNV4
+#ifdef FLB_HAVE_AWS
     {
      FLB_CONFIG_MAP_BOOL, "aws_auth", "false",
      0, FLB_TRUE, offsetof(struct flb_elasticsearch, has_aws_auth),
-     NULL
+     "Enable AWS Sigv4 Authentication"
     },
     {
-     FLB_CONFIG_MAP_STR, "aws_region", "",
+     FLB_CONFIG_MAP_STR, "aws_region", NULL,
      0, FLB_TRUE, offsetof(struct flb_elasticsearch, aws_region),
-     NULL
+     "AWS Region of your Amazon ElasticSearch Service cluster"
+    },
+    {
+     FLB_CONFIG_MAP_STR, "aws_sts_endpoint", NULL,
+     0, FLB_TRUE, offsetof(struct flb_elasticsearch, aws_sts_endpoint),
+     "Custom endpoint for the AWS STS API, used with the AWS_Role_ARN option"
+    },
+    {
+     FLB_CONFIG_MAP_STR, "aws_role_arn", NULL,
+     0, FLB_FALSE, 0,
+     "AWS IAM Role to assume to put records to your Amazon ES cluster"
+    },
+    {
+     FLB_CONFIG_MAP_STR, "aws_external_id", NULL,
+     0, FLB_FALSE, 0,
+     "External ID for the AWS IAM Role specified with `aws_role_arn`"
     },
 #endif
 
@@ -789,6 +848,11 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_STR, "time_key_format", FLB_ES_DEFAULT_TIME_KEYF,
      0, FLB_TRUE, offsetof(struct flb_elasticsearch, time_key_format),
+     NULL
+    },
+    {
+     FLB_CONFIG_MAP_BOOL, "time_key_nanos", "false",
+     0, FLB_TRUE, offsetof(struct flb_elasticsearch, time_key_nanos),
      NULL
     },
     {
@@ -859,7 +923,12 @@ struct flb_output_plugin out_es_plugin = {
     .cb_pre_run     = NULL,
     .cb_flush       = cb_es_flush,
     .cb_exit        = cb_es_exit,
+
+    /* Configuration */
     .config_map     = config_map,
+
+    /* Test */
+    .test_formatter.callback = elasticsearch_format,
 
     /* Plugin flags */
     .flags          = FLB_OUTPUT_NET | FLB_IO_OPT_TLS,

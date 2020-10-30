@@ -85,6 +85,7 @@ struct flb_env *flb_env_create()
         return NULL;
     }
 
+    env->warn_unused = FLB_TRUE;
     env->ht = ht;
     env_preset(env);
 
@@ -143,6 +144,10 @@ const char *flb_env_get(struct flb_env *env, const char *key)
     /* If it was not found, try to get it from the real environment */
     out_buf = getenv(key);
     if (!out_buf) {
+        return NULL;
+    }
+
+    if (strlen(out_buf) == 0) {
         return NULL;
     }
 

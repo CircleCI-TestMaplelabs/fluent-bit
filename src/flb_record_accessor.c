@@ -22,7 +22,6 @@
 #include <fluent-bit/flb_mem.h>
 #include <fluent-bit/flb_env.h>
 #include <fluent-bit/flb_log.h>
-#include <fluent-bit/flb_slist.h>
 #include <fluent-bit/flb_record_accessor.h>
 #include <fluent-bit/flb_ra_key.h>
 #include <fluent-bit/record_accessor/flb_ra_parser.h>
@@ -77,10 +76,10 @@ static struct flb_ra_parser *ra_parse_meta(struct flb_record_accessor *ra,
 /*
  * Supported data
  *
- * ${X}                         => environment variable
- * $key, $key[x], $key[x][y][z] => record key value
- * $0, $1,..$9                  => regex id
- * $X()                         => built-in function
+ * ${X}                               => environment variable
+ * $key, $key['x'], $key['x'][N]['z'] => record key value or array index
+ * $0, $1,..$9                        => regex id
+ * $X()                               => built-in function
  */
 static int ra_parse_buffer(struct flb_record_accessor *ra, flb_sds_t buf)
 {
@@ -91,6 +90,7 @@ static int ra_parse_buffer(struct flb_record_accessor *ra, flb_sds_t buf)
     int len;
     int pre = 0;
     int end = 0;
+    int quote_cnt;
     struct flb_ra_parser *rp;
     struct flb_ra_parser *rp_str = NULL;
 
@@ -184,8 +184,16 @@ static int ra_parse_buffer(struct flb_record_accessor *ra, flb_sds_t buf)
             continue;
         }
 
+        quote_cnt = 0;
         for (end = i + 1; end < len; end++) {
-            if (buf[end] == '.' || buf[end] == ' ' || buf[end] == ',' || buf[end] == '"') {
+            if (buf[end] == '\'') {
+              ++quote_cnt;
+            }
+            else if (buf[end] == '.' && (quote_cnt & 0x01)) {
+              // ignore '.' if it is inside a string/subkey
+              continue;
+            }
+            else if (buf[end] == '.' || buf[end] == ' ' || buf[end] == ',' || buf[end] == '"') {
                 break;
             }
         }
@@ -241,6 +249,10 @@ void flb_ra_destroy(struct flb_record_accessor *ra)
         mk_list_del(&rp->_head);
         flb_ra_parser_destroy(rp);
     }
+
+    if (ra->pattern) {
+        flb_sds_destroy(ra->pattern);
+    }
     flb_free(ra);
 }
 
@@ -280,7 +292,7 @@ struct flb_record_accessor *flb_ra_create(char *str, int translate_env)
     }
 
     /* Allocate context */
-    ra = flb_malloc(sizeof(struct flb_record_accessor));
+    ra = flb_calloc(1, sizeof(struct flb_record_accessor));
     if (!ra) {
         flb_errno();
         flb_error("[record accessor] cannot create context");
@@ -289,8 +301,17 @@ struct flb_record_accessor *flb_ra_create(char *str, int translate_env)
         }
         return NULL;
     }
+    ra->pattern = flb_sds_create(str);
+    if (!ra->pattern) {
+        flb_error("[record accessor] could not allocate pattern");
+        flb_free(ra);
+        if (buf) {
+            flb_sds_destroy(buf);
+        }
+        return NULL;
+    }
+
     mk_list_init(&ra->list);
-    flb_slist_create(&ra->list);
 
     /*
      * The buffer needs to processed where we create a list of parts, basically
@@ -507,6 +528,40 @@ flb_sds_t flb_ra_translate(struct flb_record_accessor *ra,
     }
 
     return buf;
+}
+
+/*
+ * If the record accessor rules do not generate content based on a keymap or
+ * regex, it's considered to be 'static', so the value returned will always be
+ * the same.
+ *
+ * If the 'ra' is static, return FLB_TRUE, otherwise FLB_FALSE.
+ */
+int flb_ra_is_static(struct flb_record_accessor *ra)
+{
+    struct mk_list *head;
+    struct flb_ra_parser *rp;
+
+    mk_list_foreach(head, &ra->list) {
+        rp = mk_list_entry(head, struct flb_ra_parser, _head);
+        if (rp->type == FLB_RA_PARSER_STRING) {
+            continue;
+        }
+        else if (rp->type == FLB_RA_PARSER_KEYMAP) {
+            return FLB_FALSE;
+        }
+        else if (rp->type == FLB_RA_PARSER_REGEX_ID) {
+            return FLB_FALSE;
+        }
+        else if (rp->type == FLB_RA_PARSER_TAG) {
+            continue;
+        }
+        else if (rp->type == FLB_RA_PARSER_TAG_PART) {
+            continue;
+        }
+    }
+
+    return FLB_TRUE;
 }
 
 /*

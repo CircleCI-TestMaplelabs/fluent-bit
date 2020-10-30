@@ -88,6 +88,16 @@ int flb_engine_flush(struct flb_config *config,
     return 0;
 }
 
+/* Cleanup function that runs every 1.5 second */
+static void cb_engine_sched_timer(struct flb_config *ctx, void *data)
+{
+    (void) data;
+
+    /* Upstream connections timeouts handling */
+    flb_upstream_conn_timeouts(ctx);
+}
+
+
 static inline int flb_engine_manager(flb_pipefd_t fd, struct flb_config *config)
 {
     int ret;
@@ -224,7 +234,7 @@ static inline int flb_engine_manager(flb_pipefd_t fd, struct flb_config *config)
 
             /* Let the scheduler to retry the failed task/thread */
             retry_seconds = flb_sched_request_create(config,
-                                                     retry, retry->attemps);
+                                                     retry, retry->attempts);
 
             /*
              * If for some reason the Scheduler could not include this retry,
@@ -288,7 +298,7 @@ static FLB_INLINE int flb_engine_handle_event(flb_pipefd_t fd, int mask,
         }
         else if (config->ch_manager[0] == fd) {
             ret = flb_engine_manager(fd, config);
-            if (ret == FLB_ENGINE_STOP) {
+            if (ret == FLB_ENGINE_STOP || ret == FLB_ENGINE_EV_STOP) {
                 return FLB_ENGINE_STOP;
             }
         }
@@ -307,6 +317,7 @@ static FLB_INLINE int flb_engine_handle_event(flb_pipefd_t fd, int mask,
         }
 #endif
 
+        /* Stream processor event ? */
 #ifdef FLB_HAVE_STREAM_PROCESSOR
         if (config->stream_processor_ctx) {
             ret = flb_sp_fd_event(fd, config->stream_processor_ctx);
@@ -401,11 +412,13 @@ int flb_engine_start(struct flb_config *config)
         return -1;
     }
 
-    /* Start the Storage engine */
-    ret = flb_storage_create(config);
-    if (ret == -1) {
+    /* Create the event loop and set it in the global configuration */
+    evl = mk_event_loop_create(256);
+    if (!evl) {
         return -1;
     }
+    config->evl = evl;
+
 
     flb_info("[engine] started (pid=%i)", getpid());
 
@@ -414,13 +427,6 @@ int flb_engine_start(struct flb_config *config)
                                            tmp, sizeof(tmp));
     flb_debug("[engine] coroutine stack size: %u bytes (%s)",
               config->coro_stack_size, tmp);
-
-    /* Create the event loop and set it in the global configuration */
-    evl = mk_event_loop_create(256);
-    if (!evl) {
-        return -1;
-    }
-    config->evl = evl;
 
     /*
      * Create a communication channel: this routine creates a channel to
@@ -433,6 +439,12 @@ int flb_engine_start(struct flb_config *config)
                                   config);
     if (ret != 0) {
         flb_error("[engine] could not create manager channels");
+        return -1;
+    }
+
+    /* Start the Storage engine */
+    ret = flb_storage_create(config);
+    if (ret == -1) {
         return -1;
     }
 
@@ -453,7 +465,7 @@ int flb_engine_start(struct flb_config *config)
 
     /* Initialize output plugins */
     ret = flb_output_init_all(config);
-    if (ret == -1 && config->support_mode == FLB_FALSE) {
+    if (ret == -1) {
         return -1;
     }
 
@@ -480,6 +492,12 @@ int flb_engine_start(struct flb_config *config)
         flb_error("[engine] scheduler could not start");
         return -1;
     }
+
+#ifdef FLB_HAVE_METRICS
+    if (config->storage_metrics == FLB_TRUE) {
+        config->storage_metrics_ctx = flb_storage_metrics_create(config);
+    }
+#endif
 
     /* Initialize collectors */
     flb_input_collectors_start(config);
@@ -519,6 +537,18 @@ int flb_engine_start(struct flb_config *config)
     }
 #endif
 
+    /*
+     * Sched a permanent callback triggered every 1.5 second to let other
+     * Fluent Bit components run tasks at that interval.
+     */
+    ret = flb_sched_timer_cb_create(config,
+                                    FLB_SCHED_TIMER_CB_PERM,
+                                    1500, cb_engine_sched_timer, config);
+    if (ret == -1) {
+        flb_error("[engine] could not schedule permanent callback");
+        return -1;
+    }
+
     /* Signal that we have started */
     flb_engine_started(config);
 
@@ -535,7 +565,10 @@ int flb_engine_start(struct flb_config *config)
                     event = &config->event_shutdown;
                     event->mask = MK_EVENT_EMPTY;
                     event->status = MK_EVENT_NONE;
-                    config->shutdown_fd = mk_event_timeout_create(evl, config->grace, 0, event);
+                    config->shutdown_fd = mk_event_timeout_create(evl,
+                                                                  config->grace,
+                                                                  0,
+                                                                  event);
                     flb_warn("[engine] service will stop in %u seconds", config->grace);
                 }
                 else if (ret == FLB_ENGINE_SHUTDOWN) {
@@ -584,15 +617,17 @@ int flb_engine_start(struct flb_config *config)
                  */
                 u_conn = (struct flb_upstream_conn *) event;
                 th = u_conn->thread;
-                flb_trace("[engine] resuming thread=%p", th);
-                flb_thread_resume(th);
+                if (th) {
+                    flb_trace("[engine] resuming thread=%p", th);
+                    flb_thread_resume(th);
+                }
             }
         }
 
         /* Cleanup functions associated to events and timers */
         if (config->is_running == FLB_TRUE) {
             flb_sched_timer_cleanup(config->sched);
-            flb_upstream_conn_timeouts(config);
+            flb_upstream_conn_pending_destroy(config);
         }
     }
 }
@@ -623,7 +658,6 @@ int flb_engine_shutdown(struct flb_config *config)
     flb_input_exit_all(config);
     flb_output_exit(config);
 
-
     /* Destroy the storage context */
     flb_storage_destroy(config);
 
@@ -649,6 +683,8 @@ int flb_engine_exit(struct flb_config *config)
 {
     int ret;
     uint64_t val = FLB_ENGINE_EV_STOP;
+
+    config->is_ingestion_active = FLB_FALSE;
 
     flb_input_pause_all(config);
 

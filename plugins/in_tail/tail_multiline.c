@@ -173,7 +173,7 @@ int flb_tail_mult_process_first(time_t now,
     file->mult_firstline = FLB_TRUE;
 
     /* Validate obtained time, if not set, set the current time */
-    if (flb_time_to_double(out_time) == 0) {
+    if (flb_time_to_double(out_time) == 0.0) {
         flb_time_get(out_time);
     }
 
@@ -253,9 +253,19 @@ static inline int is_last_key_val_string(char *buf, size_t size)
     }
 
     root = result.data;
-    v = root.via.map.ptr[root.via.map.size - 1].val;
-    if (v.type == MSGPACK_OBJECT_STR) {
-        ret = FLB_TRUE;
+    if (root.type != MSGPACK_OBJECT_MAP) {
+        ret = FLB_FALSE;
+    }
+    else {
+        if (root.via.map.size == 0) {
+            ret = FLB_FALSE;
+        }
+        else {
+            v = root.via.map.ptr[root.via.map.size - 1].val;
+            if (v.type == MSGPACK_OBJECT_STR) {
+                ret = FLB_TRUE;
+            }
+        }
     }
 
     msgpack_unpacked_destroy(&result);
@@ -263,7 +273,7 @@ static inline int is_last_key_val_string(char *buf, size_t size)
 }
 
 int flb_tail_mult_process_content(time_t now,
-                                  char *buf, int len,
+                                  char *buf, size_t len,
                                   struct flb_tail_file *file,
                                   struct flb_tail_config *ctx)
 {
@@ -289,12 +299,14 @@ int flb_tail_mult_process_content(time_t now,
          * will be possible.
          */
         ret = is_last_key_val_string(out_buf, out_size);
-        if (ret == FLB_TRUE) {
-            flb_tail_mult_process_first(now, out_buf, out_size, &out_time,
-                                        file, ctx);
-            return FLB_TAIL_MULT_MORE;
-        }
-        flb_free(out_buf);
+        if (ret == FLB_TRUE)
+            file->mult_firstline_append = FLB_TRUE;
+        else
+            file->mult_firstline_append = FLB_FALSE;
+
+        flb_tail_mult_process_first(now, out_buf, out_size, &out_time,
+                                    file, ctx);
+        return FLB_TAIL_MULT_MORE;
     }
 
     if (file->mult_skipping == FLB_TRUE) {
@@ -329,7 +341,7 @@ int flb_tail_mult_process_content(time_t now,
          * If no parser was found means the string log must be appended
          * to the last structured field.
          */
-        if (file->mult_firstline == FLB_TRUE) {
+        if (file->mult_firstline == FLB_TRUE && file->mult_firstline_append == FLB_TRUE) {
             flb_tail_mult_append_raw(buf, len, file, ctx);
         }
         else {

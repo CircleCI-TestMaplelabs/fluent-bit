@@ -45,6 +45,7 @@ struct flb_out_tcp *flb_tcp_conf_create(struct flb_output_instance *ins,
 
     ret = flb_output_config_map_set(ins, (void *) ctx);
     if (ret == -1) {
+        flb_free(ctx);
         return NULL;
     }
 
@@ -89,6 +90,16 @@ struct flb_out_tcp *flb_tcp_conf_create(struct flb_output_instance *ins,
         }
         else {
             ctx->out_format = ret;
+        }
+    }
+
+    /* Date key */
+    ctx->date_key = ctx->json_date_key;
+    tmp = flb_output_get_property("json_date_key", ins);
+    if (tmp) {
+        /* Just check if we have to disable it */
+        if (flb_utils_bool(tmp) == FLB_FALSE) {
+            ctx->date_key = NULL;
         }
     }
 
