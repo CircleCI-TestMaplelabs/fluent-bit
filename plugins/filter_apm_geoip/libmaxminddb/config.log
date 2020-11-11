@@ -1153,7 +1153,7 @@ configure:13127: gcc -o conftest -g  -fms-extensions   conftest.c  >&5
 conftest.c:60:6: warning: conflicting types for built-in function 'fabs' [-Wbuiltin-declaration-mismatch]
  char fabs ();
       ^~~~
-/tmp/cc2cgizT.o: In function `main':
+/tmp/ccGYd7cu.o: In function `main':
 /home/sabari/fb_origin/fluent-bit/plugins/filter_apm_geoip/libmaxminddb/conftest.c:64: undefined reference to `fabs'
 collect2: error: ld returned 1 exit status
 configure:13127: $? = 1
