@@ -765,6 +765,19 @@ int flb_parser_time_lookup(const char *time_str, size_t tsize,
         p = flb_strptime(time_ptr, parser->time_fmt_year, tm);
     }
     else {
+        /*
+         * We must ensure string passed to flb_strptime is
+         * null-terminated, which time_ptr is not guaranteed
+         * to be. So we use tmp to hold our string.
+         */
+        if (time_len >= sizeof(tmp)) {
+            return -1;
+        }
+        memcpy(tmp, time_ptr, time_len);
+        tmp[time_len] = '\0';
+        time_ptr = tmp;
+        time_len = strlen(tmp);
+
         p = flb_strptime(time_ptr, parser->time_fmt, tm);
     }
 
@@ -853,10 +866,10 @@ int flb_parser_typecast(const char *key, int key_len,
                 }
                 break;
             case FLB_PARSER_TYPE_BOOL:
-                if (!strncasecmp(val, "true", 4)) {
+                if (val_len >= 4 && !strncasecmp(val, "true", 4)) {
                     msgpack_pack_true(pck);
                 }
-                else if(!strncasecmp(val, "false", 5)){
+                else if(val_len >= 5 && !strncasecmp(val, "false", 5)){
                     msgpack_pack_false(pck);
                 }
                 else {
@@ -871,7 +884,16 @@ int flb_parser_typecast(const char *key, int key_len,
                 error = FLB_TRUE;
             }
             if (error == FLB_TRUE) {
-                flb_warn("[PARSER] key=%s cast error. save as string.", key);
+                /* We need to null-terminate key for flb_warn, as it expects
+                 * a null-terminated string, which key is not guaranteed
+                 * to be */
+                char *nt_key = flb_malloc(key_len + 1);
+                if (nt_key != NULL) {
+                    memcpy(nt_key, key, key_len);
+                    nt_key[key_len] = '\0';
+                    flb_warn("[PARSER] key=%s cast error. save as string.", nt_key);
+                    flb_free(nt_key);
+                }
                 msgpack_pack_str(pck, val_len);
                 msgpack_pack_str_body(pck, val, val_len);
             }

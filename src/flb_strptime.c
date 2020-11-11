@@ -168,6 +168,13 @@ _flb_strptime(const char *buf, const char *fmt, struct tm *tm, int initialize)
 			continue;
 		}
 
+        /*
+         * Having increased bp we need to ensure we are not
+         * moving beyond bounds.
+         */
+        if (*bp == '\0')
+           return (NULL);
+
 		if ((c = *fmt++) != '%')
 			goto literal;
 
