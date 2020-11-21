@@ -9,12 +9,12 @@
 #include <msgpack.h>
 #include "filter_geoip.h"
 #define PLUGIN_NAME "filter_apm_geoip"
-static int configure(struct geoip_ctx *ctx, struct flb_filter_instance *f_ins)
+static int geoip_configure(struct geoip_ctx *ctx, struct flb_filter_instance *f_ins)
 {
     struct flb_kv *kv = NULL;
     struct mk_list *head = NULL;
     ctx->lookup_key_check = NOT_AVAILABLE;
-    ctx->db_availability = NOT_AVAILABLE;  
+    ctx->db_availability = NOT_AVAILABLE;
     ctx->mmdb = flb_malloc(sizeof(MMDB_s));
     mk_list_foreach(head, &f_ins->properties) {
         kv = mk_list_entry(head, struct flb_kv, _head);
@@ -44,7 +44,7 @@ static int configure(struct geoip_ctx *ctx, struct flb_filter_instance *f_ins)
     return 0;
 }
 
-static int cb_modifier_init(struct flb_filter_instance *f_ins,
+static int cb_modifier_init_apm(struct flb_filter_instance *f_ins,
                                 struct flb_config *config,
                                 void *data)
 {
@@ -54,10 +54,11 @@ static int cb_modifier_init(struct flb_filter_instance *f_ins,
         flb_errno();
         return -1;
     }
-    if ( configure(ctx, f_ins) < 0 ){
+    if ( geoip_configure(ctx, f_ins) < 0 ){
+        flb_free(ctx);
         return -1;
     }
-    
+
     flb_filter_set_context(f_ins, ctx);
     return 0;
 }
@@ -190,7 +191,7 @@ static void add_default_geo_info(msgpack_packer *packer)
     msgpack_pack_double(packer,-1);
 }
 
-static int cb_modifier_filter(const void *data, size_t bytes,
+static int cb_modifier_filter_apm(const void *data, size_t bytes,
                               const char *tag, int tag_len,
                               void **out_buf, size_t *out_size,
                               struct flb_filter_instance *f_ins,
@@ -237,6 +238,7 @@ static int cb_modifier_filter(const void *data, size_t bytes,
                 char *ip_address = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
                 //populates record map with geo information
                 geoinfo_status = get_geo_info(ip_address,ctx->mmdb,&packer);
+                flb_free(ip_address);
             }
             msgpack_pack_object(&packer, (kv + i)->key);
             msgpack_pack_object(&packer, (kv + i)->val);
@@ -247,22 +249,23 @@ static int cb_modifier_filter(const void *data, size_t bytes,
     }
     msgpack_unpacked_destroy(&unpacked);
     if(geoinfo_status == remote_addr_not_available)
-    {   
+    {
         flb_error("Lookup key %s not found",ctx->lookup_key);
-        return FLB_FILTER_NOTOUCH; 
+        return FLB_FILTER_NOTOUCH;
     }
     *out_buf  = sbuffer.data;
     *out_size = sbuffer.size;
     return FLB_FILTER_MODIFIED;
-    
+
 }
-static int cb_modifier_exit(void *data, struct flb_config *config)
+static int cb_modifier_exit_apm(void *data, struct flb_config *config)
 {
     struct geoip_ctx *ctx = data;
 
     if (ctx != NULL) {
         MMDB_close(ctx->mmdb);
         flb_free(ctx->mmdb);
+        flb_free(ctx->lookup_key);
         flb_free(ctx);
     }
     return 0;
@@ -270,8 +273,8 @@ static int cb_modifier_exit(void *data, struct flb_config *config)
 struct flb_filter_plugin filter_apm_geoip_plugin = {
     .name         = "apm_geoip",
     .description  = "Adds Geo Information",
-    .cb_init      = cb_modifier_init,
-    .cb_filter    = cb_modifier_filter,
-    .cb_exit      = cb_modifier_exit,
+    .cb_init      = cb_modifier_init_apm,
+    .cb_filter    = cb_modifier_filter_apm,
+    .cb_exit      = cb_modifier_exit_apm,
     .flags        = 0
 };
