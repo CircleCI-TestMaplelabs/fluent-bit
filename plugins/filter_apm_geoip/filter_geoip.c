@@ -56,6 +56,7 @@ static int cb_modifier_init_apm(struct flb_filter_instance *f_ins,
     }
     if ( geoip_configure(ctx, f_ins) < 0 ){
         flb_free(ctx);
+        ctx = NULL;
         return -1;
     }
 
@@ -265,8 +266,11 @@ static int cb_modifier_exit_apm(void *data, struct flb_config *config)
     if (ctx != NULL) {
         MMDB_close(ctx->mmdb);
         flb_free(ctx->mmdb);
+        ctx->mmdb = NULL;
         flb_free(ctx->lookup_key);
+        ctx->lookup_key = NULL;
         flb_free(ctx);
+        ctx = NULL;
     }
     return 0;
 }
