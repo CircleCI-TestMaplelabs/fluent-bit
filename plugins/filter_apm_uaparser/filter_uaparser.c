@@ -141,7 +141,7 @@ static int get_agent_info(char *agent, int port, msgpack_packer *packer)
                 continue;
             }
             valread = recv(sock, buffer, 1024, 0);
-        } while (valread == 0 && retryCounter <= GLOBALRETRIES);
+        } while (valread == 0);
     }
 
     entry = strtok(buffer, "}");

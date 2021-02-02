@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"context"
 	"net"
+	"os"
 	"strconv"
 )
 
@@ -23,6 +24,8 @@ func socketServer(ctx context.Context, port int) {
 	l, err := net.Listen(connType, connHost+":"+strconv.Itoa(port))
 	if err != nil {
 		Log.Printf("[UA Parser] Error listening:%v", err.Error())
+		os.Stderr.WriteString(err.Error())
+		os.Exit(1)
 		return
 	}
 	defer l.Close()
@@ -83,3 +86,4 @@ func receiveAgent(conn net.Conn, agentChan chan []byte, closeChan chan bool) {
 	}
 	agentChan <- buffer
 }
+
