@@ -61,14 +61,14 @@ static int configure(struct uaparser_ctx *ctx, struct flb_filter_instance *f_ins
             ctx->lookup_key_check = AVAILABLE;
             ctx->lookup_key = flb_strndup(kv->val, flb_sds_len(kv->val));
             ctx->lookup_key_len = flb_sds_len(kv->val);
-        }       
-       
+        }
+
         if (!strcasecmp(kv->key, PORTKEY))
         {
             ctx->port_key_check = AVAILABLE;
             ctx->port = flb_strndup(kv->val, flb_sds_len(kv->val));
             ctx->port_key_len = flb_sds_len(kv->val);
-        }       
+        }
     }
     if (ctx->lookup_key_check == NOT_AVAILABLE)
     {
@@ -87,7 +87,7 @@ static int configure(struct uaparser_ctx *ctx, struct flb_filter_instance *f_ins
     return 0;
 }
 
-static int cb_modifier_init(struct flb_filter_instance *f_ins,
+static int cb_modifier_init_apm_ua(struct flb_filter_instance *f_ins,
                             struct flb_config *config,
                             void *data)
 {
@@ -100,6 +100,8 @@ static int cb_modifier_init(struct flb_filter_instance *f_ins,
     }
     if (configure(ctx, f_ins) < 0)
     {
+        flb_free(ctx);
+        ctx = NULL;
         return -1;
     }
 
@@ -119,7 +121,7 @@ static int get_agent_info(char *agent, int port, msgpack_packer *packer)
     }
     valread = recv(sock, buffer, 1024, 0);
     if (valread == 0 || valread == -1)
-    { 
+    {
         retry:
         do
         {
@@ -271,6 +273,7 @@ static int cb_modifier_filter(const void *data, size_t bytes,
                     // add_default_ua_fields(&packer);
                 }
                 flb_free(agent);
+                flb_free(agentString);
             }
             msgpack_pack_object(&packer, (kv + i)->key);
             msgpack_pack_object(&packer, (kv + i)->val);
@@ -282,7 +285,7 @@ static int cb_modifier_filter(const void *data, size_t bytes,
     {
         flb_error("[%s] Lookup key %s not found", PLUGIN_NAME, ctx->lookup_key);
         return FLB_FILTER_NOTOUCH;
-    } 
+    }
     else if (uaparser_status == unable_to_connect)
     {
         flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, retryCounter, GLOBALRETRIES);
@@ -299,14 +302,19 @@ static int cb_modifier_exit(void *data, struct flb_config *config)
     close(sock);
     if (ctx != NULL)
     {
+        flb_free(ctx->lookup_key);
+        ctx->lookup_key = NULL;
+        flb_free(ctx->port);
+        ctx->port = NULL;
         flb_free(ctx);
+        ctx = NULL;
     }
     return 0;
 }
 struct flb_filter_plugin filter_apm_uaparser_plugin = {
     .name = "apm_uaparser",
     .description = "Adds User Agent Information",
-    .cb_init = cb_modifier_init,
+    .cb_init = cb_modifier_init_apm_ua,
     .cb_filter = cb_modifier_filter,
     .cb_exit = cb_modifier_exit,
     .flags = 0};
