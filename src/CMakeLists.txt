@@ -139,9 +139,6 @@ set(extra_libs
   ${extra_libs}
   "co")
 
-set(extra_libs
-  ${extra_libs}
-  "libmaxminddb")
 
 set(extra_libs
   ${extra_libs}

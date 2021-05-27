@@ -8,7 +8,7 @@
 #include <fluent-bit/flb_time.h>
 #include <msgpack.h>
 #include <string.h>
-#include <unistd.h>
+#include <io.h>
 #include <stdlib.h>
 #include "filter_uaparser.h"
 #define PLUGIN_NAME "filter:apm_uaparser"
