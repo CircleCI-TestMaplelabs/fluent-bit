@@ -256,6 +256,9 @@ static int pack_message(msgpack_packer *mp_pck, PEVENTLOGRECORD evt,
     if (guid) {
         paths = query_guid(guid);
         flb_free(guid);
+        if (paths == NULL) {//for security channel
+            paths = read_registry(HKEY_LOCAL_MACHINE, key, L"EventMessageFile");
+        }
     }
     else {
         paths = read_registry(HKEY_LOCAL_MACHINE, key, L"EventMessageFile");
