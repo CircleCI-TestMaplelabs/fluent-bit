@@ -94,7 +94,7 @@ option(FLB_AVRO_ENCODER        "Build with Avro encoding support" No)
 option(FLB_MAXMINDDB           "Enable libmaxminddb"          Yes)
 option(FLB_FILTER_APM_GEOIP    "Enable geoip2 filter"       Yes)
 option(FLB_FILTER_APM_UAPARSER    "Enable uaparser filter"       Yes)
-option(FLB_FILTER_APM_URL_NORMALIZER  "Enable url normalizer filter" No)
+option(FLB_FILTER_APM_URL_NORMALIZER  "Enable url normalizer filter" Yes)
 # Metrics: Experimental Feature, disabled by default on 0.12 series
 # but enabled in the upcoming 0.13 release. Note that development
 # mode enable this feature.
