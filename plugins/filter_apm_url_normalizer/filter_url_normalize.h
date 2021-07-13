@@ -4,7 +4,7 @@
 #define RETRIES 2
 #define GLOBALRETRIES 100
 #define DELAYINSEC 2
-#define LOOKUPKEY "url_path"
+#define LOOKUPKEY "url_path_key"
 #define DEFAULT "Unknown"
 #define DEFAULT_LEN 7
 #define NORMALIZED_PATH "normalized_path"
