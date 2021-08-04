@@ -179,6 +179,7 @@ int winlog_read(struct winlog_channel *ch, char *buf, unsigned int size,
                 flb_info("[in_winlog] channel '%s' is cleared. reopen it.", ch->name);
                 return winlog_on_cleared(ch);
             default:
+                flb_error("request num %i",req);
                 flb_error("[in_winlog] cannot read '%s' (%i)", ch->name, err);
                 return -1;
         }
