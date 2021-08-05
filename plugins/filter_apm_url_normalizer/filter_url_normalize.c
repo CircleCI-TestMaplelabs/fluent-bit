@@ -8,7 +8,6 @@
 #include <fluent-bit/flb_time.h>
 #include <msgpack.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include "filter_url_normalize.h"
 #define PLUGIN_NAME "filter:apm_url_normalizer"
