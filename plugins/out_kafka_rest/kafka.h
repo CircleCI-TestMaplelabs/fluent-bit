@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,12 +36,6 @@ struct flb_kafka_rest {
     char *http_user;
     char *http_passwd;
 
-    /* Path */
-    char *path;
-    /* Auth Token */
-    char *token;
-    size_t token_len;
-
     /* time key */
     int time_key_len;
     char *time_key;
@@ -57,6 +51,10 @@ struct flb_kafka_rest {
 
     /* HTTP URI */
     char uri[256];
+    char *path;
+
+    char *token;
+    size_t token_len;
 
     /* Upstream connection to the backend server */
     struct flb_upstream *u;

@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,6 +57,18 @@
  */
 #define MAX_UPLOAD_ERRORS 5
 
+struct upload_queue {
+    struct s3_file *upload_file;
+    struct multipart_upload *m_upload_file;
+    char *tag;
+    int tag_len;
+
+    int retry_counter;
+    time_t upload_time;
+
+    struct mk_list _head;
+};
+
 struct multipart_upload {
     flb_sds_t s3_key;
     flb_sds_t tag;
@@ -94,20 +106,27 @@ struct flb_s3 {
     char *tag_delimiters;
     char *endpoint;
     char *sts_endpoint;
+    char *canned_acl;
+    char *compression;
+    char *content_type;
+    char *log_key;
     int free_endpoint;
     int use_put_object;
+    int send_content_md5;
+    int static_file_path;
 
     struct flb_aws_provider *provider;
     struct flb_aws_provider *base_provider;
     /* tls instances can't be re-used; aws provider requires a separate one */
-    struct flb_tls provider_tls;
+    struct flb_tls *provider_tls;
     /* one for the standard chain provider, one for sts assume role */
-    struct flb_tls sts_provider_tls;
-    struct flb_tls client_tls;
+    struct flb_tls *sts_provider_tls;
+    struct flb_tls *client_tls;
 
     struct flb_aws_client *s3_client;
     int json_date_format;
     flb_sds_t json_date_key;
+    flb_sds_t date_key;
 
     flb_sds_t buffer_dir;
 
@@ -115,6 +134,7 @@ struct flb_s3 {
     struct flb_fstore *fs;
     struct flb_fstore_stream *stream_active;  /* default active stream */
     struct flb_fstore_stream *stream_upload;  /* multipart upload stream */
+    struct flb_fstore_stream *stream_metadata; /* s3 metadata stream */
 
     /*
      * used to track that unset buffers were found on startup that have not
@@ -126,12 +146,23 @@ struct flb_s3 {
 
     struct mk_list uploads;
 
+    int preserve_data_ordering;
+    int upload_queue_success;
+    struct mk_list upload_queue;
+
     size_t file_size;
     size_t upload_chunk_size;
     time_t upload_timeout;
+    time_t retry_time;
 
     int timer_created;
     int timer_ms;
+    int key_fmt_has_uuid;
+
+    uint64_t seq_index;
+    int key_fmt_has_seq_index;
+    flb_sds_t metadata_dir;
+    flb_sds_t seq_index_file;
 
     struct flb_output_instance *ins;
 };
@@ -151,5 +182,7 @@ void multipart_upload_destroy(struct multipart_upload *m_upload);
 
 struct flb_http_client *mock_s3_call(char *error_env_var, char *api);
 int s3_plugin_under_test();
+
+int get_md5_base64(char *buf, size_t buf_size, char *md5_str, size_t md5_str_size);
 
 #endif

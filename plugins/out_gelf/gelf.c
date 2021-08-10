@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -416,7 +416,8 @@ static int cb_gelf_init(struct flb_output_instance *ins, struct flb_config *conf
     ctx->pckt_buf = NULL;
 
     if (ctx->mode == FLB_GELF_UDP) {
-        ctx->fd = flb_net_udp_connect(ins->host.name, ins->host.port);
+        ctx->fd = flb_net_udp_connect(ins->host.name, ins->host.port,
+                                      ins->net_setup.source_address);
         if (ctx->fd < 0) {
             flb_free(ctx);
             return -1;
@@ -440,11 +441,12 @@ static int cb_gelf_init(struct flb_output_instance *ins, struct flb_config *conf
         }
 
         ctx->u = flb_upstream_create(config, ins->host.name, ins->host.port,
-                                             io_flags, (void *) &ins->tls);
+                                             io_flags, ins->tls);
         if (!(ctx->u)) {
             flb_free(ctx);
             return -1;
         }
+        flb_output_upstream_set(ctx->u, ins);
     }
 
     /* Set the plugin context */

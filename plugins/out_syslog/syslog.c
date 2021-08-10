@@ -147,11 +147,12 @@ static flb_sds_t syslog_rfc5424(flb_sds_t *s, struct flb_time *tms,
     flb_sds_t tmp;
     uint8_t prival;
 
-    prival =  (msg->facility << 3) + msg->severity;
+    prival = (msg->facility << 3) + msg->severity;
 
     if (gmtime_r(&(tms->tm.tv_sec), &tm) == NULL) {
         return NULL;
     }
+
     tmp = flb_sds_printf(s, "<%i>%i %d-%02d-%02dT%02d:%02d:%02d.%06"PRIu64"Z ",
                             prival, 1, tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
                             tm.tm_hour, tm.tm_min, tm.tm_sec,
@@ -701,7 +702,7 @@ static flb_sds_t syslog_format(struct flb_syslog *ctx, msgpack_object *o,
             msg.facility = 1;
         }
 
-        if (ctx->format == FLB_SYSLOG_RFC3164) {
+        if (ctx->parsed_format == FLB_SYSLOG_RFC3164) {
             tmp = syslog_rfc3164(s, tm, &msg);
         }
         else {
@@ -850,7 +851,7 @@ static int cb_syslog_init(struct flb_output_instance *ins, struct flb_config *co
     }
 
     if (ctx->maxsize < 0) {
-        if (ctx->format == FLB_SYSLOG_RFC3164) {
+        if (ctx->parsed_format == FLB_SYSLOG_RFC3164) {
             ctx->maxsize = RFC3164_MAXSIZE;
         }
         else {
@@ -860,7 +861,8 @@ static int cb_syslog_init(struct flb_output_instance *ins, struct flb_config *co
 
     ctx->fd = -1;
     if (ctx->parsed_mode == FLB_SYSLOG_UDP) {
-        ctx->fd = flb_net_udp_connect(ins->host.name, ins->host.port);
+        ctx->fd = flb_net_udp_connect(ins->host.name, ins->host.port,
+                                      ins->net_setup.source_address);
         if (ctx->fd < 0) {
             flb_syslog_config_destroy(ctx);
             return -1;
@@ -878,11 +880,12 @@ static int cb_syslog_init(struct flb_output_instance *ins, struct flb_config *co
         }
 
         ctx->u = flb_upstream_create(config, ins->host.name, ins->host.port,
-                                             io_flags, (void *) &ins->tls);
+                                             io_flags, ins->tls);
         if (!(ctx->u)) {
             flb_syslog_config_destroy(ctx);
             return -1;
         }
+        flb_output_upstream_set(ctx->u, ins);
     }
 
     /* Set the plugin context */

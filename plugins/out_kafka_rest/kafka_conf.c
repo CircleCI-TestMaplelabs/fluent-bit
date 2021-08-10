@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +35,7 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
     char *endptr;
     struct flb_upstream *upstream;
     struct flb_kafka_rest *ctx;
+    int ret;
 
     /* Allocate context */
     ctx = flb_calloc(1, sizeof(struct flb_kafka_rest));
@@ -43,6 +44,12 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
         return NULL;
     }
     ctx->ins = ins;
+
+    ret = flb_output_config_map_set(ins, (void *) ctx);
+    if (ret == -1) {
+        flb_free(ctx);
+        return NULL;
+    }
 
     /* Get network configuration */
     flb_output_net_default("127.0.0.1", 8082, ins);
@@ -64,13 +71,16 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
                                    ins->host.name,
                                    ins->host.port,
                                    io_flags,
-                                   &ins->tls);
+                                   ins->tls);
     if (!upstream) {
         flb_plg_error(ctx->ins, "cannot create Upstream context");
         flb_kr_conf_destroy(ctx);
         return NULL;
     }
     ctx->u = upstream;
+    flb_output_upstream_set(ctx->u, ins);
+
+    flb_output_upstream_set(ctx->u, ins);
 
     /* HTTP Auth */
     tmp = flb_output_get_property("http_user", ins);
@@ -85,21 +95,12 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
             ctx->http_passwd = flb_strdup("");
         }
     }
-
-    /* Path */
-    tmp = flb_output_get_property("path", ins);
-    if (tmp) {
-        ctx->path = flb_strdup(tmp);
-    } else {
-        ctx->path = flb_strdup("");
-    }
-    /* Auth Token */
     tmp = flb_output_get_property("token", ins);
     if (tmp) {
         ctx->token = flb_strdup(tmp);
         ctx->token_len = strlen(tmp);
     } else {
-        ctx->token = flb_strdup("");
+        ctx->token = flb_strdup("");;
         ctx->token_len = 0;
     }
     /* Time Key */
@@ -178,10 +179,22 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
         ctx->topic = flb_strdup("fluent-bit");
     }
 
+    tmp = flb_output_get_property("token", ins);
+    if (tmp) {
+        ctx->token = flb_strdup(tmp);
+        ctx->token_len = strlen(tmp);
+    } else {
+        ctx->token = "";
+        ctx->token_len = 0;
+    }
+
     /* Set partition based on topic */
-    if (strlen(ctx->path)) {
+    tmp = flb_output_get_property("path", ins);
+    if (tmp) {
+        ctx->path = flb_strdup(tmp);
         snprintf(ctx->uri, sizeof(ctx->uri) - 1, "/%s/topics/%s", ctx->path, ctx->topic);
     } else {
+        ctx->path = NULL;
         snprintf(ctx->uri, sizeof(ctx->uri) - 1, "/topics/%s", ctx->topic);
     }
 
@@ -204,10 +217,13 @@ int flb_kr_conf_destroy(struct flb_kafka_rest *ctx)
     flb_free(ctx->topic);
     flb_free(ctx->http_user);
     flb_free(ctx->http_passwd);
-    flb_free(ctx->path);
     flb_free(ctx->token);
     flb_free(ctx->time_key);
     flb_free(ctx->time_key_format);
+
+    if (ctx->path) {
+        flb_free(ctx->path);
+    }
 
     if (ctx->include_tag_key) {
         flb_free(ctx->tag_key);

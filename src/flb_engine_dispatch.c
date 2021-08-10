@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,7 @@
 #include <fluent-bit/flb_output.h>
 #include <fluent-bit/flb_router.h>
 #include <fluent-bit/flb_config.h>
-#include <fluent-bit/flb_thread.h>
+#include <fluent-bit/flb_coro.h>
 #include <fluent-bit/flb_engine.h>
 #include <fluent-bit/flb_task.h>
 
@@ -36,12 +36,10 @@ int flb_engine_dispatch_retry(struct flb_task_retry *retry,
 {
     int ret;
     size_t buf_size;
-    struct flb_thread *th;
     struct flb_task *task;
-    struct flb_input_instance *i_ins;
 
     task = retry->parent;
-    i_ins = task->i_ins;
+    flb_debug("flb_engine_dispatch.c; flb_engine_dispatch_retry; Scheduler event received");
 
     /* Set file up/down based on restrictions */
     ret = flb_input_chunk_set_up(task->ic);
@@ -74,19 +72,12 @@ int flb_engine_dispatch_retry(struct flb_task_retry *retry,
         return -1;
     }
 
-    th = flb_output_thread(task,
-                           i_ins,
-                           retry->o_ins,
-                           config,
-                           task->buf, task->size,
-                           task->tag, task->tag_len);
-    if (!th) {
+    ret = flb_output_task_flush(task, retry->o_ins, config);
+    if (ret == -1) {
+        flb_task_retry_destroy(retry);
         return -1;
     }
-
-    flb_task_add_thread(th, task);
-    flb_thread_resume(th);
-
+    flb_debug("flb_engine_dispatch.c; flb_engine_dispatch_retry; Scheduler event successfully handled");
     return 0;
 }
 
@@ -129,18 +120,22 @@ static int tasks_start(struct flb_input_instance *in,
                        struct flb_config *config)
 {
     int hits = 0;
+    int retry = 0;
     struct mk_list *tmp;
     struct mk_list *head;
     struct mk_list *r_head;
     struct mk_list *r_tmp;
     struct flb_task *task;
-    struct flb_thread *th;
     struct flb_task_route *route;
     struct flb_output_instance *out;
 
     /* At this point the input instance should have some tasks linked */
     mk_list_foreach_safe(head, tmp, &in->tasks) {
         task = mk_list_entry(head, struct flb_task, _head);
+
+        if (mk_list_is_empty(&task->retries) != 0) {
+            retry++;
+        }
 
         /* Only process recently created tasks */
         if (task->status != FLB_TASK_NEW) {
@@ -176,7 +171,7 @@ static int tasks_start(struct flb_input_instance *in,
              * running something.
              */
             if (out->flags & FLB_OUTPUT_NO_MULTIPLEX) {
-                if (mk_list_size(&route->out->th_queue) > 0) {
+                if (flb_output_coros_size(route->out) > 0 || retry > 0) {
                     continue;
                 }
             }
@@ -187,6 +182,9 @@ static int tasks_start(struct flb_input_instance *in,
              * We have the Task and the Route, created a thread context for the
              * data handling.
              */
+            flb_output_task_flush(task, route->out, config);
+
+            /*
             th = flb_output_thread(task,
                                    in,
                                    route->out,
@@ -196,6 +194,7 @@ static int tasks_start(struct flb_input_instance *in,
                                    task->tag_len);
             flb_task_add_thread(th, task);
             flb_thread_resume(th);
+            */
         }
 
         if (hits == 0) {
@@ -234,11 +233,13 @@ int flb_engine_dispatch(uint64_t id, struct flb_input_instance *in,
     if (!p) {
         return 0;
     }
+    flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Flush assimilated chunks from input plugin under same tag");
 
     /* Look for chunks ready to go */
     mk_list_foreach_safe(head, tmp, &in->chunks) {
         ic = mk_list_entry(head, struct flb_input_chunk, _head);
         if (ic->busy == FLB_TRUE) {
+            flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Skip chunk processing due to fb engine taks busy'ness");
             continue;
         }
 
@@ -249,14 +250,16 @@ int flb_engine_dispatch(uint64_t id, struct flb_input_instance *in,
              * Do not release the buffer since if allocated, it will be
              * released when the task is destroyed.
              */
+            flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Chunk size is zero");
             flb_input_chunk_release_lock(ic);
             continue;
         }
         if (!buf_data) {
+            flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Empty Chunk ");
             flb_input_chunk_release_lock(ic);
             continue;
         }
-
+        flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Retrieve chunk tag-metadata ");
         /* Get the the tag reference (chunk metadata) */
         ret = flb_input_chunk_get_tag(ic, &tag_buf, &tag_len);
         if (ret == -1) {
@@ -269,7 +272,7 @@ int flb_engine_dispatch(uint64_t id, struct flb_input_instance *in,
             flb_input_chunk_release_lock(ic);
             continue;
         }
-
+        flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Proceed to task creation ");
         /* Create a task */
         task = flb_task_create(id, buf_data, buf_size,
                                ic->in, ic,
@@ -282,12 +285,15 @@ int flb_engine_dispatch(uint64_t id, struct flb_input_instance *in,
              * on that case the input chunk must be preserved and retried
              * later. So we just release it busy lock.
              */
+            flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; task creation failed");
             if (t_err == FLB_TRUE) {
                 flb_input_chunk_release_lock(ic);
             }
             continue;
         }
+        flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; Chunk Successfully ported to task");
     }
+    flb_debug("flb_engine_dispatch.c;flb_engine_dispatch; all chunks to be shipped by a enqueued task");
 
     /* Start the new enqueued Tasks */
     tasks_start(in, config);

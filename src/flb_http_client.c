@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,18 @@
 #include <fluent-bit/flb_http_client_debug.h>
 #include <fluent-bit/flb_utils.h>
 
+
 #include <mbedtls/base64.h>
+
+void flb_http_client_debug(struct flb_http_client *c,
+                           struct flb_callback *cb_ctx)
+{
+#ifdef FLB_HAVE_HTTP_CLIENT_DEBUG
+    if (cb_ctx) {
+        flb_http_client_debug_enable(c, cb_ctx);
+    }
+#endif
+}
 
 /*
  * Removes the port from the host header
@@ -108,6 +119,10 @@ static int header_lookup(struct flb_http_client *c,
     char *p;
     char *crlf;
     char *end;
+
+    if (!c->resp.data) {
+        return FLB_HTTP_MORE;
+    }
 
     /* Lookup the beginning of the header */
     p = strcasestr(c->resp.data, header);
@@ -214,6 +229,9 @@ static int check_connection(struct flb_http_client *c)
     if (ret == FLB_HTTP_NOT_FOUND) {
         return FLB_HTTP_NOT_FOUND;
     }
+    else if (ret == FLB_HTTP_MORE) {
+        return FLB_HTTP_MORE;
+    }
 
     buf = flb_malloc(len + 1);
     if (!buf) {
@@ -274,7 +292,9 @@ static int process_chunked_data(struct flb_http_client *c)
         flb_errno();
         return FLB_HTTP_ERROR;
     }
-
+    if (val < 0) {
+        return FLB_HTTP_ERROR;
+    }
     /*
      * 'val' contains the expected number of bytes, check current lengths
      * and do buffer adjustments.
@@ -372,6 +392,9 @@ static int process_data(struct flb_http_client *c)
         memcpy(code, c->resp.data + 9, 3);
         code[3] = '\0';
         c->resp.status = atoi(code);
+        if (c->resp.status < 100 || c->resp.status > 599) {
+            return FLB_HTTP_ERROR;
+        }
     }
 
     /* Try to lookup content length */
@@ -446,6 +469,19 @@ static int process_data(struct flb_http_client *c)
 
     return FLB_HTTP_MORE;
 }
+
+#if defined FLB_HAVE_TESTS_OSSFUZZ
+int fuzz_process_data(struct flb_http_client *c);
+int fuzz_process_data(struct flb_http_client *c) {
+	return process_data(c);
+}
+
+int fuzz_check_connection(struct flb_http_client *c);
+int fuzz_check_connection(struct flb_http_client *c) {
+    return check_connection(c);
+}
+
+#endif
 
 static int proxy_parse(const char *proxy, struct flb_http_client *c)
 {
@@ -729,6 +765,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         flb_http_client_destroy(c);
         return NULL;
     }
+    c->resp.data[0] = '\0';
     c->resp.data_len  = 0;
     c->resp.data_size = FLB_HTTP_DATA_SIZE_MAX;
     c->resp.data_size_max = FLB_HTTP_DATA_SIZE_MAX;
@@ -939,6 +976,7 @@ static int http_headers_compose(struct flb_http_client *c)
     int ret;
     struct mk_list *head;
     struct flb_kv *header;
+    flb_debug("flb_http_client.c; http_headers_compose; Http headers compose");
 
     /* Push header list to one buffer */
     mk_list_foreach(head, &c->headers) {
@@ -1079,7 +1117,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
     size_t bytes_header = 0;
     size_t bytes_body = 0;
     char *tmp;
-
+    flb_debug("flb_http_client.c; flb_http_do; Execute http request");
     /* Append pending headers */
     ret = http_headers_compose(c);
     if (ret == -1) {
@@ -1091,10 +1129,11 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
         new_size = c->header_size + 2;
         tmp = flb_realloc(c->header_buf, new_size);
         if (!tmp) {
+            flb_errno();
             return -1;
         }
-        c->header_buf = tmp;
-        c->header_len = new_size;
+        c->header_buf  = tmp;
+        c->header_size = new_size;
     }
 
     /* Append the ending header CRLF */
@@ -1110,16 +1149,22 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
         flb_http_client_debug_cb(c, "_debug.http.request_payload");
     }
 #endif
+    flb_debug("flb_http_client.c; flb_http_do; Write header=%s", c->header_buf);
 
+    flb_debug("[http_client] header=%s", c->header_buf);
     flb_debug("[http_client] header=%s", c->header_buf);
     /* Write the header */
     ret = flb_io_net_write(c->u_conn,
                            c->header_buf, c->header_len,
                            &bytes_header);
     if (ret == -1) {
-        flb_errno();
+        /* errno might be changed from the original call */
+        if (errno != 0) {
+            flb_errno();
+        }
         return -1;
     }
+    flb_debug("flb_http_client.c; flb_http_do; Write Body Buf=%s", c->body_buf);
 
     if (c->body_len > 0) {
         ret = flb_io_net_write(c->u_conn,
@@ -1150,6 +1195,10 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
                  * We could not allocate more space, let the caller handle
                  * this.
                  */
+                flb_warn("[http_client] cannot increase buffer: current=%zu "
+                         "requested=%zu max=%zu", c->resp.data_size,
+                         c->resp.data_size + FLB_HTTP_DATA_CHUNK,
+                         c->resp.data_size_max);
                 flb_upstream_conn_recycle(c->u_conn, FLB_FALSE);
                 return 0;
             }
@@ -1172,6 +1221,9 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
 
             ret = process_data(c);
             if (ret == FLB_HTTP_ERROR) {
+                flb_warn("[http_client] malformed HTTP response from %s:%i on "
+                         "connection #%i", c->u_conn->u->tcp_host,
+                         c->u_conn->u->tcp_port, c->u_conn->fd);
                 return -1;
             }
             else if (ret == FLB_HTTP_OK) {
