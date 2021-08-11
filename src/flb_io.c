@@ -253,7 +253,7 @@ FLB_INLINE int flb_io_net_connect(struct flb_upstream_conn *u_conn,
     struct sockaddr_storage addr;
     struct addrinfo hint;
     struct addrinfo *res = NULL;
-
+    flb_debug("flb_io,256");
     if (u_conn->fd > 0) {
         flb_socket_close(u_conn->fd);
     }

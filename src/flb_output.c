@@ -40,7 +40,8 @@
 FLB_TLS_DEFINE(struct flb_libco_out_params, flb_libco_params);
 
 void flb_output_prepare()
-{
+{   
+    flb_debug("flb_output,44");
     FLB_TLS_INIT(flb_libco_params);
 }
 
@@ -49,7 +50,7 @@ static int check_protocol(const char *prot, const char *output)
 {
     int len;
     char *p;
-
+    flb_debug("flb_output,52");
     p = strstr(output, "://");
     if (p && p != output) {
         len = p - output;
@@ -76,7 +77,7 @@ void flb_output_pre_run(struct flb_config *config)
     struct mk_list *head;
     struct flb_output_instance *ins;
     struct flb_output_plugin *p;
-
+    flb_debug("flb_output,79");
     mk_list_foreach(head, &config->outputs) {
         ins = mk_list_entry(head, struct flb_output_instance, _head);
         p = ins->p;
@@ -88,7 +89,7 @@ void flb_output_pre_run(struct flb_config *config)
 
 static void flb_output_free_properties(struct flb_output_instance *ins)
 {
-
+    flb_debug("flb_output,91");
     flb_kv_release(&ins->properties);
     flb_kv_release(&ins->net_properties);
 
@@ -115,16 +116,19 @@ static void flb_output_free_properties(struct flb_output_instance *ins)
 }
 
 int flb_output_instance_destroy(struct flb_output_instance *ins)
-{
+{   
+    flb_debug("flb_output,119");
     if (ins->alias) {
+        flb_debug("flb_output,122");
         flb_sds_destroy(ins->alias);
     }
 
     /* Remove URI context */
     if (ins->host.uri) {
+        flb_debug("flb_output,126");
         flb_uri_destroy(ins->host.uri);
     }
-
+    flb_debug("flb_output,129");
     flb_sds_destroy(ins->host.name);
     flb_sds_destroy(ins->host.address);
     flb_sds_destroy(ins->host.listen);
@@ -170,7 +174,7 @@ int flb_output_instance_destroy(struct flb_output_instance *ins)
 
     mk_list_del(&ins->_head);
     flb_free(ins);
-
+    flb_debug("flb_output,177");
     return 0;
 }
 
@@ -182,7 +186,7 @@ void flb_output_exit(struct flb_config *config)
     struct flb_output_instance *ins;
     struct flb_output_plugin *p;
     void *params;
-
+    flb_debug("flb_output,187");
     mk_list_foreach_safe(head, tmp, &config->outputs) {
         ins = mk_list_entry(head, struct flb_output_instance, _head);
         p = ins->p;
@@ -198,14 +202,16 @@ void flb_output_exit(struct flb_config *config)
         }
 
         if (ins->upstream) {
+            flb_debug("flb_output,203");
             flb_upstream_destroy(ins->upstream);
         }
-
+        flb_debug("flb_output,206");
         flb_output_instance_destroy(ins);
     }
 
     params = FLB_TLS_GET(flb_libco_params);
     if (params) {
+        flb_debug("flb_output,212");
         flb_free(params);
     }
 }
@@ -213,7 +219,7 @@ void flb_output_exit(struct flb_config *config)
 static inline int instance_id(struct flb_config *config)
 {
     struct flb_output_instance *ins;
-
+    flb_debug("flb_output,220");
     if (mk_list_size(&config->outputs) == 0) {
         return 0;
     }
@@ -236,8 +242,9 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     struct mk_list *head;
     struct flb_output_plugin *plugin;
     struct flb_output_instance *instance = NULL;
-
+    flb_debug("flb_output,243");
     if (!output) {
+        flb_debug("flb_output,245");
         return NULL;
     }
 
@@ -261,12 +268,14 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     }
 
     if (!plugin) {
+        flb_debug("flb_output,269");
         return NULL;
     }
 
     /* Create and load instance */
     instance = flb_calloc(1, sizeof(struct flb_output_instance));
     if (!instance) {
+        flb_debug("flb_output,276");
         flb_errno();
         return NULL;
     }
@@ -299,6 +308,7 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
     instance->callback = flb_callback_create(instance->name);
     if (!instance->callback) {
         flb_free(instance);
+        flb_debug("flb_output,309");
         return NULL;
     }
 
@@ -312,6 +322,7 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
         if (!ctx) {
             flb_errno();
             flb_free(instance);
+            flb_debug("flb_output,323");
             return NULL;
         }
 
@@ -366,26 +377,28 @@ struct flb_output_instance *flb_output_new(struct flb_config *config,
         ret = flb_net_host_set(plugin->name, &instance->host, output);
         if (ret != 0) {
             flb_free(instance);
+            flb_debug("flb_output,378");
             return NULL;
         }
     }
-
+    flb_debug("flb_output,382");
     flb_kv_init(&instance->properties);
     flb_kv_init(&instance->net_properties);
     mk_list_add(&instance->_head, &config->outputs);
 
     /* Tests */
     instance->test_formatter.callback = plugin->test_formatter.callback;
-
+    flb_debug("flb_output,391");
     return instance;
 }
 
 static inline int prop_key_check(const char *key, const char *kv, int k_len)
 {
     int len;
-
+    flb_debug("flb_output,396");
     len = strlen(key);
     if (strncasecmp(key, kv, k_len) == 0 && len == k_len) {
+        flb_debug("flb_output,401");
         return 0;
     }
 
@@ -402,7 +415,7 @@ int flb_output_set_property(struct flb_output_instance *ins,
     flb_sds_t tmp;
     struct flb_kv *kv;
     struct flb_config *config = ins->config;
-
+    flb_debug("flb_output,415");
     len = strlen(k);
     tmp = flb_env_var_translate(config->env, v);
     if (tmp) {
@@ -580,7 +593,7 @@ int flb_output_set_property(struct flb_output_instance *ins,
         }
         kv->val = tmp;
     }
-
+    flb_debug("flb_output,593");
     return 0;
 }
 
@@ -588,6 +601,7 @@ int flb_output_set_property(struct flb_output_instance *ins,
 void flb_output_net_default(const char *host, const int port,
                             struct flb_output_instance *ins)
 {
+     flb_debug("flb_output,601");
     /* Set default network configuration */
     if (!ins->host.name) {
         ins->host.name = flb_sds_create(host);
@@ -601,14 +615,16 @@ void flb_output_net_default(const char *host, const int port,
 const char *flb_output_name(struct flb_output_instance *ins)
 {
     if (ins->alias) {
+        flb_debug("flb_output,618");
         return ins->alias;
     }
-
+    flb_debug("flb_output,620");
     return ins->name;
 }
 
 const char *flb_output_get_property(const char *key, struct flb_output_instance *ins)
 {
+    flb_debug("flb_output,623");
     return flb_config_prop_get(key, &ins->properties);
 }
 
@@ -624,7 +640,7 @@ int flb_output_init_all(struct flb_config *config)
     struct mk_list *config_map;
     struct flb_output_instance *ins;
     struct flb_output_plugin *p;
-
+    flb_debug("flb_output,639");
     /* Retrieve the plugin reference */
     mk_list_foreach_safe(head, tmp, &config->outputs) {
         ins = mk_list_entry(head, struct flb_output_instance, _head);
@@ -692,6 +708,7 @@ int flb_output_init_all(struct flb_config *config)
              * Create a dynamic version of the configmap that will be used by the specific
              * instance in question.
              */
+            flb_debug("flb_output,707");
             config_map = flb_config_map_create(config, p->config_map);
             if (!config_map) {
                 flb_error("[output] error loading config map for '%s' plugin",
@@ -712,11 +729,12 @@ int flb_output_init_all(struct flb_config *config)
                 return -1;
             }
         }
-
+        flb_debug("flb_output,728");
         /* Get Upstream net_setup configmap */
         ins->net_config_map = flb_upstream_get_config_map(config);
         if (!ins->net_config_map) {
             flb_output_instance_destroy(ins);
+            flb_debug("flb_output,733");
             return -1;
         }
 
@@ -734,6 +752,7 @@ int flb_output_init_all(struct flb_config *config)
                                config->program_name, ins->p->name);
                 }
                 flb_output_instance_destroy(ins);
+                flb_debug("flb_output,751");
                 return -1;
             }
         }
@@ -743,25 +762,29 @@ int flb_output_init_all(struct flb_config *config)
         if (ret == -1) {
             flb_error("[output] Failed to initialize '%s' plugin",
                       p->name);
+            flb_debug("flb_output,761");
             return -1;
         }
     }
-
+    flb_debug("flb_output,765");
     return 0;
 }
 
 /* Assign an Configuration context to an Output */
 void flb_output_set_context(struct flb_output_instance *ins, void *context)
 {
+    flb_debug("flb_output,772");
     ins->context = context;
 }
 
 /* Check that at least one Output is enabled */
 int flb_output_check(struct flb_config *config)
-{
+{   
+    flb_debug("flb_output,779");
     if (mk_list_is_empty(&config->outputs) == 0) {
         return -1;
     }
+    flb_debug("flb_output,787");
     return 0;
 }
 
@@ -774,7 +797,7 @@ int flb_output_check(struct flb_config *config)
 int flb_output_upstream_set(struct flb_upstream *u, struct flb_output_instance *ins)
 {
     int flags = 0;
-
+    flb_debug("flb_output,800");
     if (!u) {
         return -1;
     }
@@ -798,7 +821,7 @@ int flb_output_upstream_set(struct flb_upstream *u, struct flb_output_instance *
 
     /* Set flags */
     u->flags |= flags;
-
+    flb_debug("flb_output,819");
     /* Set networking options 'net.*' received through instance properties */
     memcpy(&u->net, &ins->net_setup, sizeof(struct flb_net_setup));
     return 0;

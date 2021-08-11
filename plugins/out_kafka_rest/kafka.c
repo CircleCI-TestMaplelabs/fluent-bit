@@ -204,7 +204,7 @@ static void cb_kafka_flush(const void *data, size_t bytes,
     (void) i_ins;
     (void) tag;
     (void) tag_len;
-
+    flb_debug("kafka,207");
     /* Get upstream connection */
     u_conn = flb_upstream_conn_get(ctx->u);
     if (!u_conn) {

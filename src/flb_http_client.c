@@ -591,6 +591,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
                                         const char *host, int port,
                                         const char *proxy, int flags)
 {
+    flb_debug("flb_http_client,594");
     int ret;
     char *p;
     char *buf = NULL;
@@ -663,12 +664,14 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
     if (ret == -1) {
         flb_errno();
         flb_free(buf);
+        flb_debug("flb_http_client,667");
         return NULL;
     }
 
     c = flb_calloc(1, sizeof(struct flb_http_client));
     if (!c) {
         flb_free(buf);
+        flb_debug("flb_http_client,674");
         return NULL;
     }
 
@@ -708,7 +711,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         c->body_buf = body;
         c->body_len = body_len;
     }
-
+    flb_debug("flb_http_client,714");
     add_host_and_content_length(c);
 
     /* Check proxy data */
@@ -718,6 +721,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         if (ret != 0) {
             flb_debug("[http_client] Something wrong with the http_proxy parsing");
             flb_http_client_destroy(c);
+            flb_debug("flb_http_client,724");
             return NULL;
         }
     }
@@ -727,12 +731,13 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
     if (!c->resp.data) {
         flb_errno();
         flb_http_client_destroy(c);
+        flb_debug("flb_http_client,734");
         return NULL;
     }
     c->resp.data_len  = 0;
     c->resp.data_size = FLB_HTTP_DATA_SIZE_MAX;
     c->resp.data_size_max = FLB_HTTP_DATA_SIZE_MAX;
-
+    flb_debug("flb_http_client,740");
     return c;
 }
 
@@ -749,19 +754,21 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
  */
 int flb_http_buffer_size(struct flb_http_client *c, size_t size)
 {
+    flb_debug("flb_http_client,757");
     if (size < c->resp.data_size_max && size != 0) {
         flb_error("[http] requested buffer size %lu (bytes) needs to be greater than "
                   "minimum size allowed %lu (bytes)",
                   size, c->resp.data_size_max);
         return -1;
     }
-
+    flb_debug("flb_http_client,763");
     c->resp.data_size_max = size;
     return 0;
 }
 
 size_t flb_http_buffer_available(struct flb_http_client *c)
-{
+{   
+    flb_debug("flb_http_client,771");
     return (c->resp.data_size - c->resp.data_len);
 }
 
@@ -780,7 +787,7 @@ int flb_http_buffer_increase(struct flb_http_client *c, size_t size,
     char *tmp;
     size_t new_size;
     size_t allocated;
-
+    flb_debug("flb_http_client,790");
     *out_size = 0;
     new_size = c->resp.data_size + size;
 
@@ -790,6 +797,7 @@ int flb_http_buffer_increase(struct flb_http_client *c, size_t size,
             new_size = c->resp.data_size_max;
             if (new_size <= c->resp.data_size) {
                 /* Can't expand the buffer any further. */
+                flb_debug("flb_http_client,800");
                 return -1;
             }
         }
@@ -831,7 +839,7 @@ int flb_http_buffer_increase(struct flb_http_client *c, size_t size,
             c->resp.payload = c->resp.data + off_payload;
         }
     }
-
+     flb_debug("flb_http_client,842");
     *out_size = allocated;
     return 0;
 }
@@ -845,7 +853,7 @@ int flb_http_add_header(struct flb_http_client *c,
     struct flb_kv *kv;
     struct mk_list *tmp;
     struct mk_list *head;
-
+    flb_debug("flb_http_client,856");
     if (key_len < 1 || val_len < 1) {
         return -1;
     }
@@ -881,7 +889,7 @@ static int http_header_push(struct flb_http_client *c, struct flb_kv *header)
     size_t val_len;
     size_t required;
     size_t new_size;
-
+    flb_debug("flb_http_client,892");
     key = header->key;
     key_len = flb_sds_len(header->key);
     val = header->val;
@@ -907,6 +915,7 @@ static int http_header_push(struct flb_http_client *c, struct flb_kv *header)
         tmp = flb_realloc(c->header_buf, new_size);
         if (!tmp) {
             flb_errno();
+            flb_debug("flb_http_client,918");
             return -1;
         }
         c->header_buf  = tmp;
@@ -930,7 +939,7 @@ static int http_header_push(struct flb_http_client *c, struct flb_kv *header)
     /* Append the ending header CRLF */
     c->header_buf[c->header_len++] = '\r';
     c->header_buf[c->header_len++] = '\n';
-
+    flb_debug("flb_http_client,941");
     return 0;
 }
 
@@ -939,7 +948,7 @@ static int http_headers_compose(struct flb_http_client *c)
     int ret;
     struct mk_list *head;
     struct flb_kv *header;
-
+    flb_debug("flb_http_client,951");
     /* Push header list to one buffer */
     mk_list_foreach(head, &c->headers) {
         header = mk_list_entry(head, struct flb_kv, _head);
@@ -954,7 +963,8 @@ static int http_headers_compose(struct flb_http_client *c)
 }
 
 static void http_headers_destroy(struct flb_http_client *c)
-{
+{   
+    flb_debug("flb_http_client,967");
     flb_kv_release(&c->headers);
 }
 
@@ -962,6 +972,7 @@ int flb_http_set_keepalive(struct flb_http_client *c)
 {
     /* check if 'keepalive' mode is enabled in the Upstream connection */
     if (c->u_conn->u->net.keepalive == FLB_FALSE) {
+        flb_debug("flb_http_client,975");
         return -1;
     }
 
@@ -977,7 +988,7 @@ int flb_http_set_keepalive(struct flb_http_client *c)
 int flb_http_set_content_encoding_gzip(struct flb_http_client *c)
 {
     int ret;
-
+    flb_debug("flb_http_client,991");
     ret = flb_http_add_header(c,
                               FLB_HTTP_HEADER_CONTENT_ENCODING,
                               sizeof(FLB_HTTP_HEADER_CONTENT_ENCODING) - 1,
@@ -987,7 +998,8 @@ int flb_http_set_content_encoding_gzip(struct flb_http_client *c)
 
 int flb_http_set_callback_context(struct flb_http_client *c,
                                   struct flb_callback *cb_ctx)
-{
+{   
+    flb_debug("flb_http_client,1002");
     c->cb_ctx = cb_ctx;
     return 0;
 }
@@ -1002,7 +1014,7 @@ int flb_http_add_auth_header(struct flb_http_client *c,
     char tmp[1024];
     char *p;
     size_t b64_len;
-
+     flb_debug("flb_http_client,1017");
     /*
      * We allow a max of 255 bytes for user and password (255 each), meaning
      * we need at least:
@@ -1052,18 +1064,21 @@ int flb_http_add_auth_header(struct flb_http_client *c,
                               header,
                               len_h,
                               tmp, b64_len);
+     flb_debug("flb_http_client,1067");
     return ret;
 }
 
 int flb_http_basic_auth(struct flb_http_client *c,
                         const char *user, const char *passwd)
 {
+    flb_debug("flb_http_client,1074");
     return flb_http_add_auth_header(c, user, passwd, FLB_HTTP_HEADER_AUTH);
 }
 
 int flb_http_proxy_auth(struct flb_http_client *c,
                         const char *user, const char *passwd)
-{
+{   
+    flb_debug("flb_http_client,1081");
     return flb_http_add_auth_header(c, user, passwd, FLB_HTTP_HEADER_PROXY_AUTH);
 }
 
@@ -1079,7 +1094,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
     size_t bytes_header = 0;
     size_t bytes_body = 0;
     char *tmp;
-
+    flb_debug("flb_http_client,1097");
     /* Append pending headers */
     ret = http_headers_compose(c);
     if (ret == -1) {
@@ -1118,6 +1133,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
                            &bytes_header);
     if (ret == -1) {
         flb_errno();
+        flb_debug("flb_http_client,1136");
         return -1;
     }
 
@@ -1127,6 +1143,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
                                &bytes_body);
         if (ret == -1) {
             flb_errno();
+            flb_debug("flb_http_client,1145");
             return -1;
         }
     }
@@ -1187,7 +1204,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
             return -1;
         }
     }
-
+    flb_debug("flb_http_client,1207");
     /* Check 'Connection' response header */
     ret = check_connection(c);
     if (ret == FLB_HTTP_OK) {
@@ -1211,7 +1228,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
         flb_http_client_debug_cb(c, "_debug.http.response_payload");
     }
 #endif
-
+    flb_debug("flb_http_client,1231");
     return 0;
 }
 
@@ -1227,7 +1244,7 @@ int flb_http_client_proxy_connect(struct flb_upstream_conn *u_conn)
     struct flb_http_client *c;
     size_t b_sent;
     int ret = -1;
-
+    flb_debug("flb_http_client,1247");
     /* Don't pass proxy when using FLB_HTTP_CONNECT */
     flb_debug("[upstream] establishing http tunneling to proxy: host %s port %d", u->tcp_host, u->tcp_port);
     c = flb_http_client(u_conn, FLB_HTTP_CONNECT, "", NULL,
@@ -1265,12 +1282,13 @@ int flb_http_client_proxy_connect(struct flb_upstream_conn *u_conn)
 
     /* Cleanup */
     flb_http_client_destroy(c);
-
+    flb_debug("flb_http_client,1285");
     return ret;
 }
 
 void flb_http_client_destroy(struct flb_http_client *c)
-{
+{   
+    flb_debug("flb_http_client,1291");
     http_headers_destroy(c);
     flb_free(c->resp.data);
     flb_free(c->header_buf);
