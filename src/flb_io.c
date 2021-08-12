@@ -257,7 +257,7 @@ FLB_INLINE int flb_io_net_connect(struct flb_upstream_conn *u_conn,
     if (u_conn->fd > 0) {
         flb_socket_close(u_conn->fd);
     }
-
+    flb_debug("flb_io,260");
     /* Check which connection mode must be done */
     if (th) {
         async = flb_upstream_is_async(u);
@@ -265,7 +265,7 @@ FLB_INLINE int flb_io_net_connect(struct flb_upstream_conn *u_conn,
     else {
         async = FLB_FALSE;
     }
-
+    flb_debug("flb_io,268");
     /*
      * If the net.source_address was set, we need to determinate the address
      * type (for socket type creation) and bind it.
@@ -274,30 +274,39 @@ FLB_INLINE int flb_io_net_connect(struct flb_upstream_conn *u_conn,
      * property.
      */
     if (u->net.source_address) {
+        flb_debug("flb_io,276");
         memset(&hint, '\0', sizeof hint);
 
         hint.ai_family = PF_UNSPEC;
         hint.ai_flags = AI_NUMERICHOST | AI_NUMERICSERV | AI_PASSIVE;
-
+        flb_debug("flb_io,282");
         ret = getaddrinfo(u->net.source_address, NULL, &hint, &res);
+        flb_debug("flb_io,284");
         if (ret == -1) {
             flb_errno();
             flb_error("[io] cannot parse source_address=%s",
                       u->net.source_address);
+            flb_debug("flb_io,288");
             return -1;
         }
 
         if (res->ai_family == AF_INET) {
+            flb_debug("flb_io,292");
             fd = flb_net_socket_create(AF_INET, async);
+            flb_debug("flb_io,296");
         }
         else if (res->ai_family == AF_INET6) {
+            flb_debug("flb_io,299");
             fd = flb_net_socket_create(AF_INET6, async);
+            flb_debug("flb_io,301");
         }
         else {
             flb_error("[io] could not create socket for "
                       "source_address=%s, unknown ai_family",
                       u->net.source_address);
+                      flb_debug("flb_io,307");
             freeaddrinfo(res);
+            flb_debug("flb_io,309");
             return -1;
         }
 
@@ -306,53 +315,70 @@ FLB_INLINE int flb_io_net_connect(struct flb_upstream_conn *u_conn,
                       "source_address=%s",
                       res->ai_family == AF_INET ? "IPv4": "IPv6",
                       u->net.source_address);
+            flb_debug("flb_io,318");
             freeaddrinfo(res);
+            flb_debug("flb_io,320");
             return -1;
         }
-
+        flb_debug("flb_io,323");
         /* Bind the address */
         memcpy(&addr, res->ai_addr, res->ai_addrlen);
+        flb_debug("flb_io,326");
         freeaddrinfo(res);
+        flb_debug("flb_io,327");
         ret = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
         if (ret == -1) {
             flb_errno();
             flb_socket_close(fd);
             flb_error("[io] could not bind source_address=%s",
                       u->net.source_address);
+            flb_debug("flb_io,333");
             return -1;
         }
     }
     else {
         /* Create the socket */
+        flb_debug("flb_io,341");
         if (u_conn->u->flags & FLB_IO_IPV6) {
+            flb_debug("flb_io,343");
             fd = flb_net_socket_create(AF_INET6, async);
+            flb_debug("flb_io,345");
         }
         else {
+            flb_debug("flb_io,348");
             fd = flb_net_socket_create(AF_INET, async);
+            flb_debug("flb_io,350");
         }
         if (fd == -1) {
             flb_error("[io] could not create socket");
+            flb_debug("flb_io,354");
             return -1;
         }
     }
 
     u_conn->fd = fd;
     u_conn->event.fd = fd;
-
+    flb_debug("flb_io,361");
     /* Disable Nagle's algorithm */
     flb_net_socket_tcp_nodelay(fd);
 
     /* Connect */
     if (async == FLB_TRUE) {
+        flb_debug("flb_io,367");
         ret = net_io_connect_async(u, u_conn, th);
+        flb_debug("flb_io,369");
     }
     else {
+        flb_debug("flb_io,372");
         ret = net_io_connect_sync(u, u_conn);
+        flb_debug("flb_io,374");
     }
 
     /* Connection failure ? */
     if (ret == -1) {
+        flb_debug("flb_io,379");
         flb_socket_close(u_conn->fd);
+        flb_debug("flb_io,380");
         return -1;
     }
 
@@ -390,12 +416,14 @@ static int net_io_write(struct flb_upstream_conn *u_conn,
     int ret;
     int tries = 0;
     size_t total = 0;
-
+    flb_debug("flb_io,419");
     if (u_conn->fd <= 0) {
         struct flb_thread *th;
         th = (struct flb_thread *) pthread_getspecific(flb_thread_key);
+         flb_debug("flb_io,423");
         ret = flb_io_net_connect(u_conn, th);
         if (ret == -1) {
+            flb_debug("flb_io,425");
             return -1;
         }
     }
@@ -423,6 +451,7 @@ static int net_io_write(struct flb_upstream_conn *u_conn,
     }
 
     *out_len = total;
+    flb_debug("flb_io,454");
     return total;
 }
 
@@ -447,7 +476,7 @@ static FLB_INLINE int net_io_write_async(struct flb_thread *th,
     socklen_t slen = sizeof(error);
     char so_error_buf[256];
     struct flb_upstream *u = u_conn->u;
-
+    flb_debug("flb_io,479");
  retry:
     error = 0;
 
@@ -567,9 +596,10 @@ static ssize_t net_io_read(struct flb_upstream_conn *u_conn,
                            void *buf, size_t len)
 {
     int ret;
-
+    flb_debug("flb_io,599");
     ret = recv(u_conn->fd, buf, len, 0);
     if (ret == -1) {
+        flb_debug("flb_io,602");
         return -1;
     }
 
@@ -582,7 +612,7 @@ static FLB_INLINE ssize_t net_io_read_async(struct flb_thread *th,
 {
     int ret;
     struct flb_upstream *u = u_conn->u;
-
+    flb_debug("flb_io,615");
  retry_read:
     ret = recv(u_conn->fd, buf, len, 0);
     if (ret == -1) {
@@ -617,6 +647,7 @@ int flb_io_net_write(struct flb_upstream_conn *u_conn, const void *data,
                      size_t len, size_t *out_len)
 {
     int ret = -1;
+    flb_debug("flb_io,650");
     struct flb_upstream *u = u_conn->u;
     struct flb_thread *th = pthread_getspecific(flb_thread_key);
 
@@ -625,9 +656,11 @@ int flb_io_net_write(struct flb_upstream_conn *u_conn, const void *data,
 
     if (!u_conn->tls_session) {
         if (u->flags & FLB_IO_ASYNC) {
+            flb_debug("flb_io,659");
             ret = net_io_write_async(th, u_conn, data, len, out_len);
         }
         else {
+            flb_debug("flb_io,663");
             ret = net_io_write(u_conn, data, len, out_len);
         }
     }
@@ -658,7 +691,7 @@ ssize_t flb_io_net_read(struct flb_upstream_conn *u_conn, void *buf, size_t len)
     int ret = -1;
     struct flb_upstream *u = u_conn->u;
     struct flb_thread *th = pthread_getspecific(flb_thread_key);
-
+    flb_debug("flb_io,694");
     flb_trace("[io thread=%p] [net_read] try up to %zd bytes",
               th, len);
 

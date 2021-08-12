@@ -383,9 +383,9 @@ struct flb_upstream_conn *flb_upstream_conn_get(struct flb_upstream *u)
     struct mk_list *tmp;
     struct mk_list *head;
     struct flb_upstream_conn *conn = NULL;
-    if u == NULL {
-        flb_debug("flb_upstream,387");
-    }
+    // if u == NULL {
+    //     flb_debug("flb_upstream,387");
+    // }
     flb_debug("flb_upstream,378");
     flb_trace("[upstream] get new connection for %s:%i, net setup:\n"
               "net.connect_timeout        = %i seconds\n"

@@ -328,7 +328,7 @@ int net_io_tls_handshake(void *_u_conn, void *_th)
     struct flb_upstream_conn *u_conn = _u_conn;
     struct flb_upstream *u = u_conn->u;
     struct flb_thread *th = _th;
-
+    flb_debug("flb_io,331");
     session = flb_tls_session_new(u->tls->context);
     if (!session) {
         flb_error("[io_tls] could not create TLS session for %s:%i",
@@ -435,7 +435,7 @@ int flb_io_tls_net_read_async(struct flb_thread *th, struct flb_upstream_conn *u
                         void *buf, size_t len)
 {
     int ret;
-
+    flb_debug("flb_io_tls,438");
  retry_read:
     ret = mbedtls_ssl_read(&u_conn->tls_session->ssl, buf, len);
     if (ret == MBEDTLS_ERR_SSL_WANT_READ) {
