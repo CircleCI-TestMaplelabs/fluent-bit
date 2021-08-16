@@ -174,7 +174,7 @@ int flb_net_socket_blocking(flb_sockfd_t fd)
     if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL, 0) & ~O_NONBLOCK) == -1) {
 #endif
         perror("fcntl");
-        flb_debug("flb_network,176");
+        flb_debug("flb_network,177");
         return -1;
     }
 
@@ -247,13 +247,14 @@ flb_sockfd_t flb_net_tcp_connect(const char *host, unsigned long port)
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
-
+    hints.ai_protocol = IPPROTO_TCP;
     snprintf(_port, sizeof(_port), "%lu", port);
+    flb_debug("flb_network,252, Getaddr resolving host %s", host);
     ret = getaddrinfo(host, _port, &hints, &res);
     if (ret != 0) {
         flb_warn("net_tcp_connect: getaddrinfo(host='%s'): %s",
                  host, gai_strerror(ret));
-        flb_debug("flb_network,256");
+        flb_debug("flb_network,257");
         return -1;
     }
 
@@ -275,7 +276,7 @@ flb_sockfd_t flb_net_tcp_connect(const char *host, unsigned long port)
     freeaddrinfo(res);
 
     if (rp == NULL) {
-        flb_debug("flb_network,280");
+        flb_debug("flb_network,279");
         return -1;
     }
 
@@ -285,7 +286,7 @@ flb_sockfd_t flb_net_tcp_connect(const char *host, unsigned long port)
 /* "Connect" to a UDP socket server and returns the file descriptor */
 flb_sockfd_t flb_net_udp_connect(const char *host, unsigned long port)
 {
-    flb_debug("flb_network,290");
+    flb_debug("flb_network,289");
     flb_sockfd_t fd = -1;
     int ret;
     struct addrinfo hints;
@@ -295,13 +296,15 @@ flb_sockfd_t flb_net_udp_connect(const char *host, unsigned long port)
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_protocol = IPPROTO_UDP;
 
     snprintf(_port, sizeof(_port), "%lu", port);
+    flb_debug("flb_network,302, Getaddr resolving host %s", host);
     ret = getaddrinfo(host, _port, &hints, &res);
     if (ret != 0) {
         flb_warn("net_udp_connect: getaddrinfo(host='%s'): %s",
                  host, gai_strerror(ret));
-        flb_debug("flb_network,306");
+        flb_debug("flb_network,307");
         return -1;
     }
 
@@ -323,7 +326,7 @@ flb_sockfd_t flb_net_udp_connect(const char *host, unsigned long port)
     freeaddrinfo(res);
 
     if (rp == NULL) {
-        flb_debug("flb_network,326");
+        flb_debug("flb_network,329");
         return -1;
     }
 
@@ -333,7 +336,7 @@ flb_sockfd_t flb_net_udp_connect(const char *host, unsigned long port)
 /* Connect to a TCP socket server and returns the file descriptor */
 int flb_net_tcp_fd_connect(flb_sockfd_t fd, const char *host, unsigned long port)
 {
-    flb_debug("flb_network,336");
+    flb_debug("flb_network,339");
     int ret;
     struct addrinfo hints;
     struct addrinfo *res;
@@ -342,13 +345,15 @@ int flb_net_tcp_fd_connect(flb_sockfd_t fd, const char *host, unsigned long port
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
 
     snprintf(_port, sizeof(_port), "%lu", port);
+    flb_debug("flb_network,351, Getaddr resolving host %s", host);
     ret = getaddrinfo(host, _port, &hints, &res);
     if (ret != 0) {
         flb_warn("net_tcp_fd_connect: getaddrinfo(host='%s'): %s",
                  host, gai_strerror(ret));
-        flb_debug("flb_network,351");
+        flb_debug("flb_network,356");
         return -1;
     }
 
@@ -360,7 +365,7 @@ int flb_net_tcp_fd_connect(flb_sockfd_t fd, const char *host, unsigned long port
 
 flb_sockfd_t flb_net_server(const char *port, const char *listen_addr)
 {
-    flb_debug("flb_network,363");
+    flb_debug("flb_network,368");
     flb_sockfd_t fd = -1;
     int ret;
     struct addrinfo hints;
@@ -370,12 +375,13 @@ flb_sockfd_t flb_net_server(const char *port, const char *listen_addr)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
-
+    hints.ai_protocol = IPPROTO_TCP;
+    flb_debug("flb_network,379, Getaddr resolving host %s", listen_addr);
     ret = getaddrinfo(listen_addr, port, &hints, &res);
     if (ret != 0) {
         flb_warn("net_server: getaddrinfo(listen='%s:%s'): %s",
                  listen_addr, port, gai_strerror(ret));
-        flb_debug("flb_network,378");
+        flb_debug("flb_network,384");
         return -1;
     }
 
@@ -400,7 +406,7 @@ flb_sockfd_t flb_net_server(const char *port, const char *listen_addr)
     freeaddrinfo(res);
 
     if (rp == NULL) {
-        flb_debug("flb_network,403");
+        flb_debug("flb_network,409");
         return -1;
     }
 
@@ -409,7 +415,7 @@ flb_sockfd_t flb_net_server(const char *port, const char *listen_addr)
 
 flb_sockfd_t flb_net_server_udp(const char *port, const char *listen_addr)
 {
-    flb_debug("flb_network,412");
+    flb_debug("flb_network,418");
     flb_sockfd_t fd = -1;
     int ret;
     struct addrinfo hints;
@@ -419,12 +425,13 @@ flb_sockfd_t flb_net_server_udp(const char *port, const char *listen_addr)
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;
-
+    hints.ai_protocol = IPPROTO_UDP;
+    flb_debug("flb_network,429, Getaddr resolving host %s", listen_addr);
     ret = getaddrinfo(listen_addr, port, &hints, &res);
     if (ret != 0) {
         flb_warn("net_server_udp: getaddrinfo(listen='%s:%s'): %s",
                  listen_addr, port, gai_strerror(ret));
-        flb_debug("flb_network,427");
+        flb_debug("flb_network,434");
         return -1;
     }
 
@@ -446,7 +453,7 @@ flb_sockfd_t flb_net_server_udp(const char *port, const char *listen_addr)
     freeaddrinfo(res);
 
     if (rp == NULL) {
-        flb_debug("flb_network,449");
+        flb_debug("flb_network,456");
         return -1;
     }
 
@@ -456,7 +463,7 @@ flb_sockfd_t flb_net_server_udp(const char *port, const char *listen_addr)
 int flb_net_bind(flb_sockfd_t fd, const struct sockaddr *addr,
                  socklen_t addrlen, int backlog)
 {
-    flb_debug("flb_network,459");
+    flb_debug("flb_network,466");
     int ret;
 
     ret = bind(fd, addr, addrlen);
@@ -477,7 +484,7 @@ int flb_net_bind(flb_sockfd_t fd, const struct sockaddr *addr,
 int flb_net_bind_udp(flb_sockfd_t fd, const struct sockaddr *addr,
                      socklen_t addrlen)
 {
-    flb_debug("flb_network,480");
+    flb_debug("flb_network,487");
     int ret;
 
     ret = bind(fd, addr, addrlen);
@@ -491,7 +498,7 @@ int flb_net_bind_udp(flb_sockfd_t fd, const struct sockaddr *addr,
 
 flb_sockfd_t flb_net_accept(flb_sockfd_t server_fd)
 {
-    flb_debug("flb_network,494");
+    flb_debug("flb_network,501");
     flb_sockfd_t remote_fd;
     struct sockaddr sock_addr;
     socklen_t socket_size = sizeof(struct sockaddr);
@@ -513,14 +520,14 @@ flb_sockfd_t flb_net_accept(flb_sockfd_t server_fd)
 
 int flb_net_socket_ip_str(flb_sockfd_t fd, char **buf, int size, unsigned long *len)
 {
-    flb_debug("flb_network,516");
+    flb_debug("flb_network,523");
     int ret;
     struct sockaddr_storage addr;
     socklen_t s_len = sizeof(addr);
 
     ret = getpeername(fd, (struct sockaddr *) &addr, &s_len);
     if (ret == -1) {
-        flb_debug("flb_network,523");
+        flb_debug("flb_network,530");
         return -1;
     }
 
