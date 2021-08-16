@@ -4,6 +4,7 @@
 # the build flags so that we can compile fluent-bit on it.
 
 set(FLB_REGEX                 Yes)
+set(FLB_TRACE                 Yes)
 set(FLB_BACKTRACE              No)
 set(FLB_LUAJIT                Yes)
 set(FLB_EXAMPLES              Yes)

@@ -91,6 +91,7 @@ static int net_io_connect_sync(struct flb_upstream *u,
          * socket status, getting a EINPROGRESS is expected, but any other case
          * means a failure.
          */
+        flb_debug("flb_io 94, deaing with dropped connection");
         err = flb_socket_error(u_conn->fd);
         if (!FLB_EINPROGRESS(err)) {
             flb_error("[io] connection #%i failed to: %s:%i",
@@ -167,6 +168,7 @@ static int net_io_connect_async(struct flb_upstream *u,
          * socket status, getting a EINPROGRESS is expected, but any other case
          * means a failure.
          */
+        flb_debug("flb_io 171, deaing with dropped connection");
         err = flb_socket_error(u_conn->fd);
         if (!FLB_EINPROGRESS(err) && err != 0) {
             flb_error("[io] connection #%i failed to: %s:%i",
