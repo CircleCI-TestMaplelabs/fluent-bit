@@ -2,7 +2,7 @@
 
 /*  Fluent Bit Demo
  *  ===============
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,9 @@
 #include <fluent-bit/flb_filter.h>
 #include <fluent-bit/flb_utils.h>
 #include <fluent-bit/flb_time.h>
+#include <fluent-bit/flb_coro.h>
 #include <fluent-bit/flb_callback.h>
+#include <fluent-bit/tls/flb_tls.h>
 
 #include <signal.h>
 #include <stdarg.h>
@@ -105,7 +107,9 @@ static inline struct flb_filter_instance *filter_instance_get(flb_ctx_t *ctx,
 
 void flb_init_env()
 {
-    flb_thread_prepare();
+    flb_tls_init();
+    flb_coro_init();
+    flb_upstream_init();
     flb_output_prepare();
 }
 

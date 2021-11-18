@@ -4,7 +4,7 @@ project(fluent-bit)
 # Fluent Bit Version
 set(FLB_VERSION_MAJOR  1)
 set(FLB_VERSION_MINOR  7)
-set(FLB_VERSION_PATCH  0)
+set(FLB_VERSION_PATCH  5)
 set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -18,22 +18,23 @@ endif()
 # Update CFLAGS
 if (MSVC)
   add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+  add_definitions(-D_CRT_NONSTDC_NO_WARNINGS)
 
   # Use custom CFLAGS for MSVC
   #
-  #   /W3 ...... Show up to 'production quality' msgs.
   #   /Zi ...... Generate pdb files.
   #   /MT ...... Static link C runtimes.
+  #   /wd4711 .. C4711 (function selected for inline expansion)
+  #   /wd4100 .. C4100 (unreferenced formal parameter)
+  #   /wd5045 .. C5045 (Spectre mitigation)
   #
-  set(CMAKE_C_FLAGS "/DWIN32 /D_WINDOWS /DNDEBUG /W3 /O2 /Zi")
+  set(CMAKE_C_FLAGS "/DWIN32 /D_WINDOWS /DNDEBUG /O2 /Zi /wd4100 /wd4711 /wd5045")
   set(CMAKE_EXE_LINKER_FLAGS "/Debug /INCREMENTAL:NO")
   set(CMAKE_BUILD_TYPE None)
 
   # Use add_compile_options() to set /MT since Visual Studio
   # Generator does not notice /MT in CMAKE_C_FLAGS.
   add_compile_options(/MT)
-elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -fno-common")
 else()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 endif()
@@ -60,14 +61,15 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/library")
 
 # Build Options
 option(FLB_ALL                 "Enable all features"           No)
-option(FLB_DEBUG               "Build with debug symbols"      No)
+option(FLB_DEBUG               "Build with debug symbols"     Yes)
+option(FLB_RELEASE             "Build with debug symbols"      No)
 option(FLB_SMALL               "Optimise for small size"       No)
 option(FLB_COVERAGE            "Build with code-coverage"      No)
 option(FLB_JEMALLOC            "Build with Jemalloc support"   No)
 option(FLB_REGEX               "Build with Regex support"     Yes)
 option(FLB_UTF8_ENCODER        "Build with UTF8 encoding support" Yes)
 option(FLB_PARSER              "Build with Parser support"    Yes)
-option(FLB_TLS                 "Build with SSL/TLS support"    No)
+option(FLB_TLS                 "Build with SSL/TLS support"   Yes)
 option(FLB_BINARY              "Build executable binary"      Yes)
 option(FLB_EXAMPLES            "Build examples"               Yes)
 option(FLB_SHARED_LIB          "Build shared library"         Yes)
@@ -81,7 +83,7 @@ option(FLB_MTRACE              "Enable mtrace support"         No)
 option(FLB_POSIX_TLS           "Force POSIX thread storage"    No)
 option(FLB_INOTIFY             "Enable inotify support"       Yes)
 option(FLB_SQLDB               "Enable SQL embedded DB"       Yes)
-option(FLB_HTTP_SERVER         "Enable HTTP Server"            No)
+option(FLB_HTTP_SERVER         "Enable HTTP Server"           Yes)
 option(FLB_BACKTRACE           "Enable stacktrace support"    Yes)
 option(FLB_LUAJIT              "Enable Lua Scripting support" Yes)
 option(FLB_RECORD_ACCESSOR     "Enable record accessor"       Yes)
@@ -89,12 +91,12 @@ option(FLB_SIGNV4              "Enable AWS Signv4 support"    Yes)
 option(FLB_AWS                "Enable AWS support"            Yes)
 option(FLB_STATIC_CONF         "Build binary using static configuration")
 option(FLB_STREAM_PROCESSOR    "Enable Stream Processor"      Yes)
+option(FLB_FILTER_APM_GEOIP    "Enable geoip2 filter"         Yes)
+option(FLB_FILTER_APM_UAPARSER    "Enable uaparser filter"       Yes)
+option(FLB_FILTER_APM_URL_NORMALIZER "Enable url normalizer filter" Yes)
 option(FLB_CORO_STACK_SIZE     "Set coroutine stack size")
 option(FLB_AVRO_ENCODER        "Build with Avro encoding support" No)
-option(FLB_MAXMINDDB           "Enable libmaxminddb"          Yes)
-option(FLB_FILTER_APM_GEOIP    "Enable geoip2 filter"       Yes)
-option(FLB_FILTER_APM_UAPARSER    "Enable uaparser filter"       Yes)
-option(FLB_FILTER_APM_URL_NORMALIZER  "Enable url normalizer filter" Yes)
+
 # Metrics: Experimental Feature, disabled by default on 0.12 series
 # but enabled in the upcoming 0.13 release. Note that development
 # mode enable this feature.
@@ -102,20 +104,6 @@ option(FLB_METRICS            "Enable metrics support"       No)
 
 # Proxy Plugins
 option(FLB_PROXY_GO           "Enable Go plugins support"   Yes)
-
-# Advanced options for Flushing methods
-# =====================================
-# Flush methods defines under what kind of context/environment the plugins
-# flush callback is invoked. Since this is done through co-routines
-# there are two options available:
-#
-# FLB_FLUSH_LIBCO: set by default, use lib/flb_libco implementation which
-# supports amd64, arm, x86 and ppc.
-#
-# FLB_FLUSH_UCONTEXT (DEPRECATED): It uses POSIX ucontext for co-routines
-# implementation.
-# Despites this is POSIX deprecated, it's supported on Linux and BSD
-# systems, but specific old-toolchains do not implement it.
 
 # Build-in Plugins
 option(FLB_IN_CPU             "Enable CPU input plugin"             Yes)
@@ -126,7 +114,7 @@ option(FLB_IN_DOCKER_EVENTS   "Enable Docker events input plugin"   Yes)
 option(FLB_IN_EXEC            "Enable Exec input plugin"            Yes)
 option(FLB_IN_FORWARD         "Enable Forward input plugin"         Yes)
 option(FLB_IN_HEALTH          "Enable Health input plugin"          Yes)
-option(FLB_IN_HTTP            "Enable HTTP input plugin"             No)
+option(FLB_IN_HTTP            "Enable HTTP input plugin"            Yes)
 option(FLB_IN_MEM             "Enable Memory input plugin"          Yes)
 option(FLB_IN_KMSG            "Enable Kernel log input plugin"      Yes)
 option(FLB_IN_LIB             "Enable library mode input plugin"    Yes)
@@ -180,7 +168,9 @@ option(FLB_OUT_KAFKA          "Enable Kafka output plugin"           No)
 option(FLB_OUT_KAFKA_REST     "Enable Kafka Rest output plugin"     Yes)
 option(FLB_OUT_CLOUDWATCH_LOGS "Enable AWS CloudWatch output plugin" Yes)
 option(FLB_OUT_KINESIS_FIREHOSE "Enable AWS Firehose output plugin" Yes)
+option(FLB_OUT_KINESIS_STREAMS "Enable AWS Kinesis output plugin" Yes)
 option(FLB_OUT_S3             "Enable AWS S3 output plugin"         Yes)
+option(FLB_OUT_WEBSOCKET      "Enable Websocket output plugin"      Yes)
 option(FLB_FILTER_ALTER_SIZE  "Enable alter_size filter"            Yes)
 option(FLB_FILTER_AWS         "Enable aws filter"                   Yes)
 option(FLB_FILTER_EXPECT      "Enable expect filter"                Yes)
@@ -196,6 +186,7 @@ option(FLB_FILTER_NEST        "Enable nest filter"                  Yes)
 option(FLB_FILTER_LUA         "Enable Lua scripting filter"         Yes)
 option(FLB_FILTER_RECORD_MODIFIER "Enable record_modifier filter"   Yes)
 option(FLB_FILTER_TENSORFLOW  "Enable tensorflow filter"             No)
+option(FLB_FILTER_GEOIP2      "Enable geoip2 filter"                Yes)
 
 # Debug callbacks
 option(FLB_HTTP_CLIENT_DEBUG  "Enable HTTP Client debug callbacks"   No)
@@ -236,6 +227,7 @@ if(FLB_ALL)
   set(FLB_OUT_SYSLOG   1)
   set(FLB_OUT_LIB      1)
   set(FLB_OUT_FLOWCOUNTER 1)
+  set(FLB_OUT_WEBSOCKET   1)
 endif()
 
 if(FLB_DEV)
@@ -254,6 +246,10 @@ endif()
 
 if(FLB_HTTP_CLIENT_DEBUG)
   FLB_DEFINITION(FLB_HAVE_HTTP_CLIENT_DEBUG)
+endif()
+
+if (FLB_TESTS_OSSFUZZ)
+  FLB_DEFINITION(FLB_HAVE_TESTS_OSSFUZZ)
 endif()
 
 # Set Fluent Bit dependency libraries path
@@ -307,6 +303,8 @@ endif()
 # Enable Debug symbols if specified
 if(FLB_DEBUG)
   set(CMAKE_BUILD_TYPE "Debug")
+elseif(FLB_RELEASE)
+  set(CMAKE_BUILD_TYPE "RelWithDebInfo")
 endif()
 
 if(FLB_PARSER)
@@ -368,20 +366,27 @@ add_subdirectory(${FLB_PATH_LIB_MINIZ} EXCLUDE_FROM_ALL)
 
 # Avro
 if(FLB_AVRO_ENCODER)
-  #temporary for PR1
-  #add this back in on next PR
-  #add_subdirectory(${FLB_PATH_LIB_AVRO} EXCLUDE_FROM_ALL)
   # jansson
-  set(JANSSON_BUILD_DOCS Off)
-  set(JANSSON_EXAMPLES Off)
-  set(JANSSON_WITHOUT_TESTS  On)
-  include(cmake/jansson.cmake)
+  option(JANSSON_BUILD_DOCS         OFF)
+  option(JANSSON_EXAMPLES           OFF)
+  option(JANSSON_WITHOUT_TESTS       ON)
+  option(JANSSON_BUILD_SHARED_LIBS  OFF)
+  add_subdirectory(${FLB_PATH_LIB_JANSSON})
+
+  #avro
+  add_subdirectory(${FLB_PATH_LIB_AVRO} EXCLUDE_FROM_ALL)
 endif()
 
 # tutf8e
 if(FLB_UTF8_ENCODER)
   add_subdirectory(${FLB_PATH_LIB_TUTF8E} EXCLUDE_FROM_ALL)
 endif()
+
+# xxHash
+FLB_OPTION(BUILD_SHARED_LIBS "Build shared libs" OFF)
+set(XXHASH_BUILD_ENABLE_INLINE_API OFF)
+set(XXHASH_BUILD_XXHSUM OFF)
+add_subdirectory(${FLB_PATH_LIB_XXHASH}/cmake_unofficial EXCLUDE_FROM_ALL)
 
 # Chunk I/O
 FLB_OPTION(CIO_LIB_STATIC  ON)
@@ -413,10 +418,24 @@ endif()
 
 if(FLB_TLS)
   FLB_DEFINITION(FLB_HAVE_TLS)
+
+  # Build mbedtls: yes, in this transition period we always enable it
   option(ENABLE_TESTING  OFF)
   option(ENABLE_PROGRAMS OFF)
   option(INSTALL_MBEDTLS_HEADERS OFF)
   add_subdirectory(${FLB_PATH_LIB_MBEDTLS} EXCLUDE_FROM_ALL)
+
+  # Link OpenSSL statically on Windows.
+  if (FLB_SYSTEM_WINDOWS)
+    set(OPENSSL_USE_STATIC_LIBS ON)
+    set(OPENSSL_MSVC_STATIC_RT  ON)
+  endif()
+
+  # find OpenSSL (our preferred choice now)
+  find_package(OpenSSL)
+  if(OPENSSL_FOUND)
+    FLB_DEFINITION(FLB_HAVE_OPENSSL)
+  endif()
 endif()
 
 # Metrics
@@ -733,6 +752,10 @@ endif()
 add_subdirectory(include)
 add_subdirectory(plugins)
 add_subdirectory(src)
+
+if(NOT FLB_SHARED_LIB)
+  set(FLB_EXAMPLES OFF)
+endif()
 
 if(FLB_EXAMPLES)
   add_subdirectory(examples)

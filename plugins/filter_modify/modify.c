@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -815,15 +815,15 @@ static inline int apply_rule_RENAME(struct filter_modify_ctx *ctx,
         map_count_keys_matching_str(map, rule->val, rule->val_len);
 
     if (match_keys == 0) {
-        flb_plg_debug(ctx->ins, "Rule RENAME %s TO %s : No keys matching %s "
-                      "found, not applying rule",
-                      rule->key, rule->val, rule->key);
+        // flb_plg_debug(ctx->ins, "Rule RENAME %s TO %s : No keys matching %s "
+        //               "found, not applying rule",
+        //               rule->key, rule->val, rule->key);
         return FLB_FILTER_NOTOUCH;
     }
     else if (conflict_keys > 0) {
-        flb_plg_debug(ctx->ins, "Rule RENAME %s TO %s : Existing key %s found, "
-                      "not applying rule",
-                      rule->key, rule->val, rule->key);
+        // flb_plg_debug(ctx->ins, "Rule RENAME %s TO %s : Existing key %s found, "
+        //               "not applying rule",
+        //               rule->key, rule->val, rule->key);
         return FLB_FILTER_NOTOUCH;
     }
     else {
@@ -855,9 +855,9 @@ static inline int apply_rule_HARD_RENAME(struct filter_modify_ctx *ctx,
     msgpack_object_kv *kv;
 
     if (match_keys == 0) {
-        flb_plg_debug(ctx->ins, "Rule HARD_RENAME %s TO %s : No keys matching "
-                      "%s found, not applying rule",
-                      rule->key, rule->val, rule->key);
+        // flb_plg_debug(ctx->ins, "Rule HARD_RENAME %s TO %s : No keys matching "
+        //               "%s found, not applying rule",
+        //               rule->key, rule->val, rule->key);
         return FLB_FILTER_NOTOUCH;
     }
     else if (conflict_keys == 0) {
@@ -1218,8 +1218,8 @@ static inline int apply_modifying_rules(msgpack_packer *packer,
         // * * Record array item 1/2
         msgpack_pack_object(packer, ts);
 
-        flb_plg_debug(ctx->ins, "Input map size %d elements, output map size "
-                      "%d elements", records_in, map.via.map.size);
+        // flb_plg_debug(ctx->ins, "Input map size %d elements, output map size "
+        //               "%d elements", records_in, map.via.map.size);
 
         // * * Record array item 2/2
         msgpack_pack_object(packer, map);

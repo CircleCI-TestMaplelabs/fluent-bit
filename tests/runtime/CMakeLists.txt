@@ -65,6 +65,7 @@ if(FLB_IN_LIB)
 
   FLB_RT_TEST(FLB_OUT_CLOUDWATCH_LOGS   "out_cloudwatch.c")
   FLB_RT_TEST(FLB_OUT_KINESIS_FIREHOSE  "out_firehose.c")
+  FLB_RT_TEST(FLB_OUT_KINESIS_STREAMS   "out_kinesis.c")
   FLB_RT_TEST(FLB_OUT_S3                "out_s3.c")
   FLB_RT_TEST(FLB_OUT_TD                "out_td.c")
 endif()
@@ -102,6 +103,9 @@ foreach(source_file ${CHECK_PROGRAMS})
       ${CMAKE_THREAD_LIBS_INIT}
       ${SYSTEMD_LIB}
       )
+      if(FLB_AVRO_ENCODER)
+        target_link_libraries(${source_file_we} avro-static jansson)
+      endif()
     add_test(NAME ${source_file_we}
             COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${source_file_we}
             WORKING_DIRECTORY ${CMAKE_HOME_DIRECTORY}/build)

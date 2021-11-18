@@ -7,6 +7,8 @@
 #include <fluent-bit/flb_gzip.h>
 #include <fluent-bit/flb_hash.h>
 #include <fluent-bit/flb_uri.h>
+#include <fluent-bit/flb_sha512.h>
+#include <fluent-bit/flb_regex.h>
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
 {
@@ -30,16 +32,37 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     char *uri     = NULL;
     char *new_dst = NULL;
 
-    new_dst = (char*)malloc(size * 2);
-    flb_utils_write_str_buf(null_terminated, size, &new_dst, &new_size);
-    flb_free(new_dst);
+    if (flb_utils_write_str_buf(null_terminated, size, &new_dst, &new_size) == 0) {
+        flb_free(new_dst);
+    }
 
     struct mk_list *list = flb_utils_split(null_terminated, 'A', 3);
     if (list != NULL) {
         flb_utils_split_free(list);
     }
 
-    flb_utils_url_split(null_terminated, &prot, &host, &port, &uri);
+    if (flb_utils_url_split(null_terminated, &prot, &host, &port, &uri) == 0) {
+        flb_free(prot);
+        flb_free(port);
+        flb_free(host);
+        flb_free(uri);
+    }
+
+    char *split_protocol;
+    char *split_username;
+    char *split_password;
+    char *split_host;
+    char *split_port;
+    if (flb_utils_proxy_url_split(null_terminated, &split_protocol,
+            split_username, split_password, split_host, split_port) == 0) {
+        flb_free(split_protocol);
+        flb_free(split_username);
+        flb_free(split_password);
+        flb_free(split_host);
+        flb_free(split_port);
+    }
+
+
     flb_utils_size_to_bytes(null_terminated);
     flb_utils_time_split(null_terminated, &sec, &nsec);
     flb_utils_time_to_seconds(null_terminated);
@@ -54,7 +77,10 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         flb_uri_dump(uri2);
         flb_uri_destroy(uri2);
     }
-    flb_uri_encode((char*)data, size);
+    flb_sds_t encoded = flb_uri_encode((char*)data, size);
+    if (encoded != NULL) {
+        flb_sds_destroy(encoded);
+    }
 
     /* Fuzzing of flb_hash.c */
     struct flb_hash *ht = NULL;
@@ -97,6 +123,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         }
     }
 
+    /* sds */
+    flb_sds_t fs = flb_sds_create_len((const char*)data, size);
+    if (fs != NULL) {
+        fs = flb_sds_cat_esc(fs, "AAABBBCCC", 9, "ABC", 3);
+        if (fs != NULL) {
+            flb_sds_destroy(fs);
+        }
+    }
+
     /* Fuzzing of flb_gzip.c */
     void *str = NULL;
     size_t len;
@@ -113,10 +148,41 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
     void *out_data2 = NULL;
     size_t out2_len;
-    flb_gzip_uncompress((char*)data, size, &out_data2, &out2_len);
-    if (out_data2 != NULL) {
+    int uncompress_ret = flb_gzip_uncompress((char*)data, size, &out_data2, &out2_len);
+    if (uncompress_ret != -1 && out_data2 != NULL) {
         flb_free(out_data2);
     }
+
+    /* Fuzzing the sha routines */
+    struct flb_sha512 sha512;
+    uint8_t buf[64];
+    flb_sha512_init(&sha512);
+    flb_sha512_update(&sha512, null_terminated, 32);
+    flb_sha512_update(&sha512, null_terminated+32, 32);
+    flb_sha512_update(&sha512, null_terminated+64, 32);
+    flb_sha512_sum(&sha512, buf);
+
+
+    /* regex */
+    char *pregex = "^(?<INT>[^ ]+) (?<FLOAT>[^ ]+) (?<BOOL>[^ ]+) (?<STRING>.+)$";
+    flb_regex_init();
+    struct flb_regex *freg = flb_regex_create(pregex);
+    if (freg != NULL) {
+        struct flb_regex_search res;
+        flb_regex_match(freg, null_terminated, size);
+        flb_regex_destroy(freg);
+    }
+    flb_regex_exit();
+
+    /* slist */
+    struct mk_list list3;
+    flb_slist_create(&list3);
+    flb_sds_t slist_str = flb_sds_create_len((const char*)data, size);
+    flb_slist_add_sds(&list3, slist_str);
+    flb_slist_entry_get(&list3, 100);
+    flb_slist_dump(&list3);
+    flb_slist_destroy(&list3);
+
 
     /* General cleanup */
     flb_free(null_terminated);

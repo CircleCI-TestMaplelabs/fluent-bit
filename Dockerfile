@@ -3,8 +3,8 @@ FROM debian:buster as builder
 # Fluent Bit version
 ENV FLB_MAJOR 1
 ENV FLB_MINOR 7
-ENV FLB_PATCH 0
-ENV FLB_VERSION 1.7.0
+ENV FLB_PATCH 5
+ENV FLB_VERSION 1.7.5
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -20,7 +20,6 @@ RUN apt-get update && \
     libsasl2-dev \
     pkg-config \
     libsystemd-dev \
-    autoconf \
     libzstd-dev \
     zlib1g-dev \
     libpq-dev \
@@ -33,7 +32,7 @@ COPY . /tmp/src/
 RUN rm -rf /tmp/src/build/*
 
 WORKDIR /tmp/src/build/
-RUN cmake -DFLB_DEBUG=Off \
+RUN cmake -DFLB_RELEASE=On \
           -DFLB_TRACE=Off \
           -DFLB_JEMALLOC=On \
           -DFLB_TLS=On \

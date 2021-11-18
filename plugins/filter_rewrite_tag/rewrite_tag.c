@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +35,6 @@
 static int emitter_create(struct flb_rewrite_tag *ctx)
 {
     int ret;
-    int coll_fd;
     struct flb_input_instance *ins;
 
     ret = flb_input_name_exists(ctx->emitter_name, ctx->config);
@@ -80,12 +79,6 @@ static int emitter_create(struct flb_rewrite_tag *ctx)
         flb_input_instance_destroy(ins);
         return -1;
     }
-
-    /* Retrieve the collector id registered on the in_emitter initialization */
-    coll_fd = in_emitter_get_collector_id(ins);
-
-    /* Initialize plugin collector (event callback) */
-    flb_input_collector_start(coll_fd, ins);
 
 #ifdef FLB_HAVE_METRICS
     /* Override Metrics title */
@@ -322,6 +315,11 @@ static int process_record(const char *tag, int tag_len, msgpack_object map,
     /* Release any capture info from 'results' */
     flb_regex_results_release(&result);
 
+    /* Validate new outgoing tag */
+    if (!out_tag) {
+        return FLB_FALSE;
+    }
+
     /* Emit record with new tag */
     ret = in_emitter_add_record(out_tag, flb_sds_len(out_tag), buf, buf_size,
                                 ctx->ins_emitter);
@@ -386,7 +384,7 @@ static int cb_rewrite_tag_filter(const void *data, size_t bytes,
          * - record with new tag was emitted and the rule says it must be preserved
          * - record was not emitted
          */
-        if ((ret == FLB_TRUE && keep == FLB_TRUE) || ret == FLB_FALSE) {
+        if (keep == FLB_TRUE) {
             msgpack_sbuffer_write(&mp_sbuf, (char *) data + pre, off - pre);
         }
 

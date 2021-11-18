@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019      The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -22,18 +22,32 @@
 #include <fluent-bit/flb_http_client.h>
 #include <fluent-bit/flb_aws_credentials.h>
 #include <fluent-bit/flb_aws_util.h>
+#include <fluent-bit/flb_jsmn.h>
 
-#include <jsmn/jsmn.h>
 #include <stdlib.h>
 #include <time.h>
 
-#define TEN_MINUTES    600
+#define FIVE_MINUTES   600
 #define TWELVE_HOURS   43200
 
 /* Credentials Environment Variables */
 #define AWS_ACCESS_KEY_ID              "AWS_ACCESS_KEY_ID"
 #define AWS_SECRET_ACCESS_KEY          "AWS_SECRET_ACCESS_KEY"
 #define AWS_SESSION_TOKEN              "AWS_SESSION_TOKEN"
+
+#define EKS_POD_EXECUTION_ROLE         "EKS_POD_EXECUTION_ROLE"
+
+/* declarations */
+static struct flb_aws_provider *standard_chain_create(struct flb_config
+                                                      *config,
+                                                      struct flb_tls *tls,
+                                                      char *region,
+                                                      char *sts_endpoint,
+                                                      char *proxy,
+                                                      struct
+                                                      flb_aws_client_generator
+                                                      *generator,
+                                                      int eks_irsa);
 
 
 /*
@@ -203,6 +217,23 @@ void async_fn_standard_chain(struct flb_aws_provider *provider)
     }
 }
 
+void upstream_set_fn_standard_chain(struct flb_aws_provider *provider,
+                                    struct flb_output_instance *ins)
+{
+    struct flb_aws_provider_chain *implementation = provider->implementation;
+    struct flb_aws_provider *sub_provider = NULL;
+    struct mk_list *tmp;
+    struct mk_list *head;
+
+    /* set all providers to async mode */
+    mk_list_foreach_safe(head, tmp, &implementation->sub_providers) {
+        sub_provider = mk_list_entry(head,
+                                     struct flb_aws_provider,
+                                     _head);
+        sub_provider->provider_vtable->upstream_set(sub_provider, ins);
+    }
+}
+
 void destroy_fn_standard_chain(struct flb_aws_provider *provider) {
     struct flb_aws_provider *sub_provider;
     struct flb_aws_provider_chain *implementation;
@@ -230,6 +261,7 @@ static struct flb_aws_provider_vtable standard_chain_provider_vtable = {
     .destroy = destroy_fn_standard_chain,
     .sync = sync_fn_standard_chain,
     .async = async_fn_standard_chain,
+    .upstream_set = upstream_set_fn_standard_chain,
 };
 
 struct flb_aws_provider *flb_standard_chain_provider_create(struct flb_config
@@ -241,6 +273,66 @@ struct flb_aws_provider *flb_standard_chain_provider_create(struct flb_config
                                                             struct
                                                             flb_aws_client_generator
                                                             *generator)
+{
+    struct flb_aws_provider *provider;
+    struct flb_aws_provider *tmp_provider;
+    char *eks_pod_role = NULL;
+    char *session_name;
+
+    eks_pod_role = getenv(EKS_POD_EXECUTION_ROLE);
+    if (eks_pod_role && strlen(eks_pod_role) > 0) {
+        /*
+         * eks fargate
+         * standard chain will be base provider used to
+         * assume the EKS_POD_EXECUTION_ROLE
+         */
+        flb_debug("[aws_credentials] Using EKS_POD_EXECUTION_ROLE=%s", eks_pod_role);
+        tmp_provider = standard_chain_create(config, tls, region, sts_endpoint,
+                                             proxy, generator, FLB_FALSE);
+
+        if (!tmp_provider) {
+            return NULL;
+        }
+
+        session_name = flb_sts_session_name();
+        if (!session_name) {
+            flb_error("Failed to generate random STS session name");
+            flb_aws_provider_destroy(tmp_provider);
+            return NULL;
+        }
+
+        provider = flb_sts_provider_create(config, tls, tmp_provider, NULL,
+                                           eks_pod_role, session_name,
+                                           region, sts_endpoint,
+                                           NULL, generator);
+        if (!provider) {
+            flb_error("Failed to create EKS Fargate Credential Provider");
+            flb_aws_provider_destroy(tmp_provider);
+            return NULL;
+        }
+        /* session name can freed after provider is created */
+        flb_free(session_name);
+        session_name = NULL;
+
+        return provider;
+    }
+
+    /* standard case- not in EKS Fargate */
+    provider = standard_chain_create(config, tls, region, sts_endpoint,
+                                     proxy, generator, FLB_TRUE);
+    return provider;
+}
+
+static struct flb_aws_provider *standard_chain_create(struct flb_config
+                                                      *config,
+                                                      struct flb_tls *tls,
+                                                      char *region,
+                                                      char *sts_endpoint,
+                                                      char *proxy,
+                                                      struct
+                                                      flb_aws_client_generator
+                                                      *generator,
+                                                      int eks_irsa)
 {
     struct flb_aws_provider *sub_provider;
     struct flb_aws_provider *provider;
@@ -285,11 +377,20 @@ struct flb_aws_provider *flb_standard_chain_provider_create(struct flb_config
                   "standard chain");
     }
 
-    sub_provider = flb_eks_provider_create(config, tls, region, sts_endpoint, proxy, generator);
+    if (eks_irsa == FLB_TRUE) {
+        sub_provider = flb_eks_provider_create(config, tls, region, sts_endpoint, proxy, generator);
+        if (sub_provider) {
+            /* EKS provider can fail if we are not running in k8s */;
+            mk_list_add(&sub_provider->_head, &implementation->sub_providers);
+            flb_debug("[aws_credentials] Initialized EKS Provider in standard chain");
+        }
+    }
+
+    sub_provider = flb_ecs_provider_create(config, generator);
     if (sub_provider) {
-        /* EKS provider can fail if we are not running in k8s */;
+        /* ECS Provider will fail creation if we are not running in ECS */
         mk_list_add(&sub_provider->_head, &implementation->sub_providers);
-        flb_debug("[aws_credentials] Initialized EKS Provider in standard chain");
+        flb_debug("[aws_credentials] Initialized ECS Provider in standard chain");
     }
 
     sub_provider = flb_ec2_provider_create(config, generator);
@@ -300,13 +401,6 @@ struct flb_aws_provider *flb_standard_chain_provider_create(struct flb_config
     }
     mk_list_add(&sub_provider->_head, &implementation->sub_providers);
     flb_debug("[aws_credentials] Initialized EC2 Provider in standard chain");
-
-    sub_provider = flb_ecs_provider_create(config, generator);
-    if (sub_provider) {
-        /* ECS Provider will fail creation if we are not running in ECS */
-        mk_list_add(&sub_provider->_head, &implementation->sub_providers);
-        flb_debug("[aws_credentials] Initialized ECS Provider in standard chain");
-    }
 
     return provider;
 }
@@ -406,7 +500,6 @@ int init_fn_environment(struct flb_aws_provider *provider)
     return refresh_env(provider);
 }
 
-
 /*
  * sync and async are no-ops for the env provider because it does not make
  * network IO calls
@@ -417,6 +510,12 @@ void sync_fn_environment(struct flb_aws_provider *provider)
 }
 
 void async_fn_environment(struct flb_aws_provider *provider)
+{
+    return;
+}
+
+void upstream_set_fn_environment(struct flb_aws_provider *provider,
+                                 struct flb_output_instance *ins)
 {
     return;
 }
@@ -433,6 +532,7 @@ static struct flb_aws_provider_vtable environment_provider_vtable = {
     .destroy = destroy_fn_environment,
     .sync = sync_fn_environment,
     .async = async_fn_environment,
+    .upstream_set = upstream_set_fn_environment,
 };
 
 struct flb_aws_provider *flb_aws_env_provider_create() {
@@ -512,22 +612,17 @@ time_t flb_aws_cred_expiration(const char *timestamp)
     }
     /*
      * Sanity check - expiration should be ~10 minutes to 12 hours in the future
-     * < 10 minutes is problematic because the provider auto-refreshes if creds
-     * expire in 5 minutes. Disabling auto-refresh reduces requests for creds.
-     * (The flb_aws_client will still force a refresh of creds and then retry
-     * if it receives an auth error).
      * (> 12 hours is impossible with the current APIs and would likely indicate
      *  a bug in how this code processes timestamps.)
      */
      now = time(NULL);
-     if (expiration < (now + TEN_MINUTES)) {
-         flb_warn("[aws_credentials] Credential expiration '%s' is less than"
-                  "10 minutes in the future. Disabling auto-refresh.",
+     if (expiration < (now + FIVE_MINUTES)) {
+         flb_warn("[aws_credentials] Credential expiration '%s' is less than "
+                  "5 minutes in the future.",
                   timestamp);
-         return -1;
      }
      if (expiration > (now + TWELVE_HOURS)) {
-         flb_warn("[aws_credentials] Credential expiration '%s' is greater than"
+         flb_warn("[aws_credentials] Credential expiration '%s' is greater than "
                   "12 hours in the future. This should not be possible.",
                   timestamp);
      }

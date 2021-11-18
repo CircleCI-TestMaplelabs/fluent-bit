@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,10 +30,6 @@
 #include <fluent-bit/flb_task_map.h>
 
 #include <monkey/mk_core.h>
-
-#ifdef FLB_HAVE_TLS
-#include <fluent-bit/flb_io_tls.h>
-#endif
 
 #define FLB_CONFIG_FLUSH_SECS   5
 #define FLB_CONFIG_HTTP_LISTEN  "0.0.0.0"
@@ -125,6 +121,9 @@ struct flb_config {
     /* Environment */
     void *env;
 
+    /* Working Directory */
+    char *workdir;
+
     /* Exit status code */
     int exit_status_code;
 
@@ -154,6 +153,16 @@ struct flb_config {
      *    proxy shouldn't be passed when calling flb_http_client().
      */
     char *http_proxy;
+
+    /*
+     * A comma-separated list of host names that shouldn't go through
+     * any proxy is set in (only an asterisk, * matches all hosts).
+     * As a convention (https://curl.se/docs/manual.html), this value can be set
+     * and respected by `NO_PROXY` environment variable when `HTTP_PROXY` is used.
+     * Example: NO_PROXY="127.0.0.1,localhost,kubernetes.default.svc"
+     * Note: only `,` is allowed as seperator between URLs.
+     */
+    char *no_proxy;
 
     /* Chunk I/O Buffering */
     void *cio;
@@ -202,6 +211,8 @@ struct flb_config {
     void *sched;
 
     struct flb_task_map tasks_map[2048];
+
+    int dry_run;
 };
 
 #define FLB_CONFIG_LOG_LEVEL(c) (c->log->level)

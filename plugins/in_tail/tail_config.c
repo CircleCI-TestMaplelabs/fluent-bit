@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -234,6 +234,24 @@ struct flb_tail_config *flb_tail_config_create(struct flb_input_instance *ins,
         ctx->db = flb_tail_db_open(tmp, ins, ctx, config);
         if (!ctx->db) {
             flb_plg_error(ctx->ins, "could not open/create database");
+            flb_tail_config_destroy(ctx);
+            return NULL;
+        }
+    }
+
+    /* Journal mode check */
+    tmp = flb_input_get_property("db.journal_mode", ins);
+    if (tmp) {
+        if (strcasecmp(tmp, "DELETE") != 0 &&
+            strcasecmp(tmp, "TRUNCATE") != 0 &&
+            strcasecmp(tmp, "PERSIST") != 0 &&
+            strcasecmp(tmp, "MEMORY") != 0 &&
+            strcasecmp(tmp, "WAL") != 0 &&
+            strcasecmp(tmp, "OFF") != 0) {
+
+            flb_plg_error(ctx->ins, "invalid db.journal_mode=%s", tmp);
+            flb_tail_config_destroy(ctx);
+            return NULL;
         }
     }
 

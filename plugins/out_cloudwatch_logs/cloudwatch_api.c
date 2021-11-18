@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -61,6 +61,13 @@ static struct flb_aws_header create_group_header = {
     .key_len = 12,
     .val = "Logs_20140328.CreateLogGroup",
     .val_len = 28,
+};
+
+static struct flb_aws_header put_retention_policy_header = {
+    .key = "X-Amz-Target",
+    .key_len = 12,
+    .val = "Logs_20140328.PutRetentionPolicy",
+    .val_len = 32,
 };
 
 static struct flb_aws_header create_stream_header = {
@@ -763,6 +770,10 @@ struct msgpack_object pack_emf_payload(struct flb_cloudwatch *ctx,
     msgpack_unpack(mp_sbuf.data, mp_sbuf.size, NULL, &mempool, 
                    &deserialized_emf_object);
 
+    /* free allocated memory */
+    msgpack_zone_destroy(&mempool);
+    msgpack_sbuffer_destroy(&mp_sbuf);
+
     return deserialized_emf_object;
 }
 
@@ -794,6 +805,9 @@ int process_and_send(struct flb_cloudwatch *ctx, const char *input_plugin,
 
     /* Added for EMF support */
     struct flb_intermediate_metric *metric;
+    struct mk_list *tmp;
+    struct mk_list *head;
+    struct flb_intermediate_metric *an_item;
 
     int intermediate_metric_type;
     char *intermediate_metric_unit;
@@ -893,13 +907,22 @@ int process_and_send(struct flb_cloudwatch *ctx, const char *input_plugin,
                 metric->timestamp = tms;
 
                 mk_list_add(&metric->_head, &flb_intermediate_metrics);
+                
             }  
 
             struct msgpack_object emf_payload = pack_emf_payload(ctx, 
                                                                 &flb_intermediate_metrics, 
                                                                 input_plugin, 
                                                                 tms);
-            flb_free(metric);
+            
+            /* free the intermediate metric list */
+            
+            mk_list_foreach_safe(head, tmp, &flb_intermediate_metrics) {
+                an_item = mk_list_entry(head, struct flb_intermediate_metric, _head);
+                mk_list_del(&an_item->_head);
+                flb_free(an_item);
+            }
+
             ret = add_event(ctx, buf, stream, &emf_payload, &tms);
         } else {
             ret = add_event(ctx, buf, stream, &map, &tms);
@@ -1013,6 +1036,83 @@ struct log_stream *get_log_stream(struct flb_cloudwatch *ctx,
      return get_dynamic_log_stream(ctx, tag, tag_len);
 }
 
+static int set_log_group_retention(struct flb_cloudwatch *ctx)
+{
+    if (ctx->log_retention_days <= 0) {
+        /* no need to set */
+        return 0;
+    }
+
+    struct flb_http_client *c = NULL;
+    struct flb_aws_client *cw_client;
+    flb_sds_t body;
+    flb_sds_t tmp;
+    flb_sds_t error;
+
+    flb_plg_info(ctx->ins, "Setting retention policy on log group %s to %dd", ctx->log_group, ctx->log_retention_days);
+
+    body = flb_sds_create_size(68 + strlen(ctx->log_group));
+    if (!body) {
+        flb_sds_destroy(body);
+        flb_errno();
+        return -1;
+    }
+
+    /* construct CreateLogGroup request body */
+    tmp = flb_sds_printf(&body, "{\"logGroupName\":\"%s\",\"retentionInDays\":%d}", ctx->log_group, ctx->log_retention_days);
+    if (!tmp) {
+        flb_sds_destroy(body);
+        flb_errno();
+        return -1;
+    }
+    body = tmp;
+
+    if (plugin_under_test() == FLB_TRUE) {
+        c = mock_http_call("TEST_PUT_RETENTION_POLICY_ERROR", "PutRetentionPolicy");
+    }
+    else {
+        cw_client = ctx->cw_client;
+        c = cw_client->client_vtable->request(cw_client, FLB_HTTP_POST,
+                                              "/", body, strlen(body),
+                                              &put_retention_policy_header, 1);
+    }
+
+    if (c) {
+        flb_plg_debug(ctx->ins, "PutRetentionPolicy http status=%d", c->resp.status);
+
+        if (c->resp.status == 200) {
+            /* success */
+            flb_plg_info(ctx->ins, "Set retention policy to %d", ctx->log_retention_days);
+            flb_sds_destroy(body);
+            flb_http_client_destroy(c);
+            return 0;
+        }
+
+        /* Check error */
+        if (c->resp.payload_size > 0) {
+            error = flb_aws_error(c->resp.payload, c->resp.payload_size);
+            if (error != NULL) {
+                /* some other error occurred; notify user */
+                flb_aws_print_error(c->resp.payload, c->resp.payload_size,
+                                        "PutRetentionPolicy", ctx->ins);
+                flb_sds_destroy(error);
+            }
+            else {
+                /* error can not be parsed, print raw response to debug */
+                flb_plg_debug(ctx->ins, "Raw response: %s", c->resp.payload);
+            }
+        }
+    }
+
+    flb_plg_error(ctx->ins, "Failed to putRetentionPolicy");
+    if (c) {
+        flb_http_client_destroy(c);
+    }
+    flb_sds_destroy(body);
+
+    return -1;
+}
+
 int create_log_group(struct flb_cloudwatch *ctx)
 {
     struct flb_http_client *c = NULL;
@@ -1020,6 +1120,7 @@ int create_log_group(struct flb_cloudwatch *ctx)
     flb_sds_t body;
     flb_sds_t tmp;
     flb_sds_t error;
+    int ret;
 
     flb_plg_info(ctx->ins, "Creating log group %s", ctx->log_group);
 
@@ -1058,7 +1159,8 @@ int create_log_group(struct flb_cloudwatch *ctx)
             ctx->group_created = FLB_TRUE;
             flb_sds_destroy(body);
             flb_http_client_destroy(c);
-            return 0;
+            ret = set_log_group_retention(ctx);
+            return ret;
         }
 
         /* Check error */
@@ -1072,7 +1174,8 @@ int create_log_group(struct flb_cloudwatch *ctx)
                     flb_sds_destroy(body);
                     flb_sds_destroy(error);
                     flb_http_client_destroy(c);
-                    return 0;
+                    ret = set_log_group_retention(ctx);
+                    return ret;
                 }
                 /* some other error occurred; notify user */
                 flb_aws_print_error(c->resp.payload, c->resp.payload_size,

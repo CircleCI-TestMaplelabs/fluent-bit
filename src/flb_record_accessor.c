@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -190,8 +190,8 @@ static int ra_parse_buffer(struct flb_record_accessor *ra, flb_sds_t buf)
               ++quote_cnt;
             }
             else if (buf[end] == '.' && (quote_cnt & 0x01)) {
-              // ignore '.' if it is inside a string/subkey
-              continue;
+                /* ignore '.' if it is inside a string/subkey */
+                continue;
             }
             else if (buf[end] == '.' || buf[end] == ' ' || buf[end] == ',' || buf[end] == '"') {
                 break;
@@ -229,7 +229,8 @@ static int ra_parse_buffer(struct flb_record_accessor *ra, flb_sds_t buf)
 
     /* Append remaining string */
     if (i - 1 > end && pre < i) {
-        rp_str = ra_parse_string(ra, buf, pre, i);
+        end = flb_sds_len(buf);
+        rp_str = ra_parse_string(ra, buf, pre, end);
         if (rp_str) {
             mk_list_add(&rp_str->_head, &ra->list);
         }
@@ -456,7 +457,12 @@ static flb_sds_t ra_translate_keymap(struct flb_ra_parser *rp, flb_sds_t buf,
     }
     else if (v->type == FLB_RA_FLOAT) {
         len = snprintf(str, sizeof(str) - 1, "%f", v->val.f64);
-        tmp = flb_sds_cat(buf, str, len);
+        if (len >= sizeof(str)) {
+            tmp = flb_sds_cat(buf, str, sizeof(str)-1);
+        }
+        else {
+            tmp = flb_sds_cat(buf, str, len);
+        }
     }
     else if (v->type == FLB_RA_STRING) {
         tmp = flb_sds_cat(buf, v->val.string, flb_sds_len(v->val.string));
@@ -503,10 +509,10 @@ flb_sds_t flb_ra_translate(struct flb_record_accessor *ra,
         else if (rp->type == FLB_RA_PARSER_REGEX_ID && result) {
             tmp = ra_translate_regex_id(rp, result, buf);
         }
-        else if (rp->type == FLB_RA_PARSER_TAG) {
+        else if (rp->type == FLB_RA_PARSER_TAG && tag) {
             tmp = ra_translate_tag(rp, buf, tag, tag_len);
         }
-        else if (rp->type == FLB_RA_PARSER_TAG_PART) {
+        else if (rp->type == FLB_RA_PARSER_TAG_PART && tag) {
             tmp = ra_translate_tag_part(rp, buf, tag, tag_len);
         }
         else {
@@ -592,6 +598,32 @@ int flb_ra_regex_match(struct flb_record_accessor *ra, msgpack_object map,
                                   regex, result);
 }
 
+/*
+ * If 'record accessor' pattern matches an entry in the 'map', set the
+ * reference in 'out_key' and 'out_val' for the entries in question.
+ *
+ * Returns FLB_TRUE if the pattern matched a kv pair, otherwise it returns
+ * FLB_FALSE.
+ */
+int flb_ra_get_kv_pair(struct flb_record_accessor *ra, msgpack_object map,
+                       msgpack_object **start_key,
+                       msgpack_object **out_key, msgpack_object **out_val)
+{
+    struct flb_ra_parser *rp;
+
+    if (mk_list_size(&ra->list) == 0) {
+        return -1;
+    }
+
+    rp = mk_list_entry_first(&ra->list, struct flb_ra_parser, _head);
+    if (!rp->key) {
+        return FLB_FALSE;
+    }
+
+    return flb_ra_key_value_get(rp->key->name, map, rp->key->subkeys,
+                                start_key, out_key, out_val);
+}
+
 struct flb_ra_value *flb_ra_get_value_object(struct flb_record_accessor *ra,
                                              msgpack_object map)
 {
@@ -602,5 +634,9 @@ struct flb_ra_value *flb_ra_get_value_object(struct flb_record_accessor *ra,
     }
 
     rp = mk_list_entry_first(&ra->list, struct flb_ra_parser, _head);
+    if (!rp->key) {
+        return NULL;
+    }
+
     return flb_ra_key_to_value(rp->key->name, map, rp->key->subkeys);
 }

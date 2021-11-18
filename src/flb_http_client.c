@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,7 +42,18 @@
 #include <fluent-bit/flb_http_client_debug.h>
 #include <fluent-bit/flb_utils.h>
 
+
 #include <mbedtls/base64.h>
+
+void flb_http_client_debug(struct flb_http_client *c,
+                           struct flb_callback *cb_ctx)
+{
+#ifdef FLB_HAVE_HTTP_CLIENT_DEBUG
+    if (cb_ctx) {
+        flb_http_client_debug_enable(c, cb_ctx);
+    }
+#endif
+}
 
 /*
  * Removes the port from the host header
@@ -108,6 +119,10 @@ static int header_lookup(struct flb_http_client *c,
     char *p;
     char *crlf;
     char *end;
+
+    if (!c->resp.data) {
+        return FLB_HTTP_MORE;
+    }
 
     /* Lookup the beginning of the header */
     p = strcasestr(c->resp.data, header);
@@ -274,7 +289,9 @@ static int process_chunked_data(struct flb_http_client *c)
         flb_errno();
         return FLB_HTTP_ERROR;
     }
-
+    if (val < 0) {
+        return FLB_HTTP_ERROR;
+    }
     /*
      * 'val' contains the expected number of bytes, check current lengths
      * and do buffer adjustments.
@@ -446,6 +463,19 @@ static int process_data(struct flb_http_client *c)
 
     return FLB_HTTP_MORE;
 }
+
+#if defined FLB_HAVE_TESTS_OSSFUZZ
+int fuzz_process_data(struct flb_http_client *c);
+int fuzz_process_data(struct flb_http_client *c) {
+	return process_data(c);
+}
+
+int fuzz_check_connection(struct flb_http_client *c);
+int fuzz_check_connection(struct flb_http_client *c) {
+    return check_connection(c);
+}
+
+#endif
 
 static int proxy_parse(const char *proxy, struct flb_http_client *c)
 {
@@ -729,6 +759,7 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         flb_http_client_destroy(c);
         return NULL;
     }
+    c->resp.data[0] = '\0';
     c->resp.data_len  = 0;
     c->resp.data_size = FLB_HTTP_DATA_SIZE_MAX;
     c->resp.data_size_max = FLB_HTTP_DATA_SIZE_MAX;
@@ -1093,8 +1124,8 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
         if (!tmp) {
             return -1;
         }
-        c->header_buf = tmp;
-        c->header_len = new_size;
+        c->header_buf  = tmp;
+        c->header_size = new_size;
     }
 
     /* Append the ending header CRLF */
@@ -1117,7 +1148,10 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
                            c->header_buf, c->header_len,
                            &bytes_header);
     if (ret == -1) {
-        flb_errno();
+        /* errno might be changed from the original call */
+        if (errno != 0) {
+            flb_errno();
+        }
         return -1;
     }
 

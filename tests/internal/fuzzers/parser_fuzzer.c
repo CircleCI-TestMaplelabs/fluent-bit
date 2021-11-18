@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <fluent-bit/flb_utils.h>
 #include <fluent-bit/flb_time.h>
 #include <fluent-bit/flb_parser.h>
 #include <fluent-bit/flb_parser_decoder.h>
@@ -35,13 +36,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
     else if (GET_MOD_EQ(4,1)) {
         format = "regex";
-        /*
+#ifdef PREG_FUZZ
         pregex = malloc(30);
         pregex[29] = '\0';
         memcpy(pregex, data, 29);
         data += 29;
         size -= 29;
-        */
+#else
+        pregex = "^(?<INT>[^ ]+) (?<FLOAT>[^ ]+) (?<BOOL>[^ ]+) (?<STRING>.+)$";
+#endif
     }
     else if (GET_MOD_EQ(4,2)) {
         format = "ltsv";
@@ -122,8 +125,12 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
         }
     }
     MOVE_INPUT(1);
+    /* print our config struct */
+    flb_utils_print_setup(fuzz_config);
+
+    /* now call into the parser */
     fuzz_parser = flb_parser_create("fuzzer", format, pregex,
-            time_fmt, time_key, time_offset, time_keep,
+            time_fmt, time_key, time_offset, time_keep, 0,
             types, types_len, list, fuzz_config);
 
     /* Second step is to use the random parser to parse random input */
@@ -163,9 +170,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     if (time_offset != NULL) {
         flb_free(time_offset);
     }
+#ifdef PREG_FUZZ
     if (pregex != NULL) {
         flb_free(pregex);
     }
+#endif
 
     return 0;
 }

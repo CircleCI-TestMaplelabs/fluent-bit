@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -442,7 +442,7 @@ static inline int apply_lifting_rules(msgpack_packer * packer,
     int items_to_lift = map_count_fn(&map, ctx, &is_kv_to_lift);
 
     if (items_to_lift == 0) {
-        flb_plg_debug(ctx->ins, "Lift : No match found for %s", ctx->key);
+        //flb_plg_debug(ctx->ins, "Lift : No match found for %s", ctx->key);
         return 0;
     }
 
@@ -455,9 +455,9 @@ static inline int apply_lifting_rules(msgpack_packer * packer,
     int toplevel_items =
         (map.via.map.size - items_to_lift) + count_items_to_lift(&map, ctx);
 
-    flb_plg_debug(ctx->ins, "Lift : Outer map size is %d, will be %d, "
-                  "lifting %d record(s)",
-                  map.via.map.size, toplevel_items, items_to_lift);
+    // flb_plg_debug(ctx->ins, "Lift : Outer map size is %d, will be %d, "
+    //               "lifting %d record(s)",
+    //               map.via.map.size, toplevel_items, items_to_lift);
 
     /* Record array init(2) */
     msgpack_pack_array(packer, 2);
@@ -600,7 +600,7 @@ static int cb_nest_filter(const void *data, size_t bytes,
             total_modified_records += modified_records;
         }
         else {
-            flb_plg_debug(ctx->ins, "Record is NOT an array, skipping");
+            // flb_plg_debug(ctx->ins, "Record is NOT an array, skipping");
             msgpack_pack_object(&packer, result.data);
         }
     }

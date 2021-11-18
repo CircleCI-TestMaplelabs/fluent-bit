@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -285,6 +285,11 @@ int flb_gzip_uncompress(void *in_data, size_t in_len,
         return -1;
     }
     out_size = dlen;
+
+    /* Ensure size is above 0 */
+    if (((p + in_len) - start - 8) <= 0) {
+        return -1;
+    }
 
     /* Map zip content */
     zip_data = (uint8_t *) start;

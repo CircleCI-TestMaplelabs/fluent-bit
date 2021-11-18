@@ -2,7 +2,7 @@
 
 /*  Fluent Bit
  *  ==========
- *  Copyright (C) 2019-2020 The Fluent Bit Authors
+ *  Copyright (C) 2019-2021 The Fluent Bit Authors
  *  Copyright (C) 2015-2018 Treasure Data Inc.
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -105,11 +105,43 @@ int flb_parser_logfmt_do(struct flb_parser *parser,
                          void **out_buf, size_t *out_size,
                          struct flb_time *out_time);
 
+/*
+ * This function is used to free all aspects of a parser
+ * which is provided by the caller of flb_create_parser.
+ * Specifically, this function frees all but parser.types and
+ * parser.decoders from a parser.
+ *
+ * This function is only to be used in parser creation routines.
+ */
+static void flb_interim_parser_destroy(struct flb_parser *parser)
+{
+    if (parser->type == FLB_PARSER_REGEX) {
+        flb_regex_destroy(parser->regex);
+        flb_free(parser->p_regex);
+    }
+
+    flb_free(parser->name);
+    if (parser->time_fmt) {
+        flb_free(parser->time_fmt);
+        flb_free(parser->time_fmt_full);
+    }
+    if (parser->time_fmt_year) {
+        flb_free(parser->time_fmt_year);
+    }
+    if (parser->time_key) {
+        flb_free(parser->time_key);
+    }
+
+    mk_list_del(&parser->_head);
+    flb_free(parser);
+}
+
 struct flb_parser *flb_parser_create(const char *name, const char *format,
                                      const char *p_regex,
                                      const char *time_fmt, const char *time_key,
                                      const char *time_offset,
                                      int time_keep,
+                                     int time_strict,
                                      struct flb_parser_types *types,
                                      int types_len,
                                      struct mk_list *decoders,
@@ -201,7 +233,7 @@ struct flb_parser *flb_parser_create(const char *name, const char *format,
             p->time_fmt_year = flb_malloc(size + 4);
             if (!p->time_fmt_year) {
                 flb_errno();
-                flb_parser_destroy(p);
+                flb_interim_parser_destroy(p);
                 return NULL;
             }
 
@@ -224,7 +256,7 @@ struct flb_parser *flb_parser_create(const char *name, const char *format,
 #else
             flb_error("[parser] timezone offset not supported");
             flb_error("[parser] you cannot use %%z/%%Z on this platform");
-            flb_parser_destroy(p);
+            flb_interim_parser_destroy(p);
             return NULL;
 #endif
         }
@@ -239,7 +271,7 @@ struct flb_parser *flb_parser_create(const char *name, const char *format,
          * The following links are a good reference:
          *
          * - http://stackoverflow.com/questions/7114690/how-to-parse-syslog-timestamp
-         * - http://code.activestate.com/lists/python-list/521885/
+         * - http://code.activestate.com/lists/python-list/521885
          */
         if (is_epoch == FLB_TRUE || p->time_with_year == FLB_TRUE) {
             timeptr = p->time_fmt;
@@ -261,7 +293,7 @@ struct flb_parser *flb_parser_create(const char *name, const char *format,
             len = strlen(time_offset);
             ret = flb_parser_tzone_offset(time_offset, len, &diff);
             if (ret == -1) {
-                flb_parser_destroy(p);
+                flb_interim_parser_destroy(p);
                 return NULL;
             }
             p->time_offset = diff;
@@ -273,6 +305,7 @@ struct flb_parser *flb_parser_create(const char *name, const char *format,
     }
 
     p->time_keep = time_keep;
+    p->time_strict = time_strict;
     p->types = types;
     p->types_len = types_len;
     return p;
@@ -420,6 +453,7 @@ int flb_parser_conf_file(const char *file, struct flb_config *config)
     flb_sds_t types_str;
     flb_sds_t tmp_str;
     int time_keep;
+    int time_strict;
     int types_len;
     struct mk_rconf *fconf;
     struct mk_rconf_section *section;
@@ -507,6 +541,14 @@ int flb_parser_conf_file(const char *file, struct flb_config *config)
             flb_sds_destroy(tmp_str);
         }
 
+        /* Time_Strict */
+        time_strict = FLB_TRUE;
+        tmp_str = get_parser_key("Time_Strict", config, section);
+        if (tmp_str) {
+            time_strict = flb_utils_bool(tmp_str);
+            flb_sds_destroy(tmp_str);
+        }
+
         /* Time_Offset (UTC offset) */
         time_offset = get_parser_key("Time_Offset", config, section);
 
@@ -524,7 +566,7 @@ int flb_parser_conf_file(const char *file, struct flb_config *config)
 
         /* Create the parser context */
         if (!flb_parser_create(name, format, regex,
-                               time_fmt, time_key, time_offset, time_keep,
+                               time_fmt, time_key, time_offset, time_keep, time_strict,
                                types, types_len, decoders, config)) {
             goto fconf_error;
         }
@@ -782,23 +824,35 @@ int flb_parser_time_lookup(const char *time_str, size_t tsize,
     }
 
     if (p == NULL) {
-        flb_error("[parser] cannot parse '%.*s'", tsize, time_str);
-        return -1;
+        if (parser->time_strict) {
+            flb_error("[parser] cannot parse '%.*s'", tsize, time_str);
+            return -1;
+        }
+        flb_debug("[parser] non-exact match '%.*s'", tsize, time_str);
+        return 0;
     }
 
     if (parser->time_frac_secs) {
         ret = parse_subseconds(p, time_len - (p - time_ptr), ns);
         if (ret < 0) {
-            flb_error("[parser] cannot parse %L for '%.*s'", tsize, time_str);
-            return -1;
+            if (parser->time_strict) {
+                flb_error("[parser] cannot parse %%L for '%.*s'", tsize, time_str);
+                return -1;
+            }
+            flb_debug("[parser] non-exact match on %%L '%.*s'", tsize, time_str);
+            return 0;
         }
         p += ret;
 
         /* Parse the remaining part after %L */
         p = flb_strptime(p, parser->time_frac_secs, tm);
         if (p == NULL) {
-            flb_error("[parser] cannot parse '%.*s' after %L", tsize, time_str);
-            return -1;
+            if (parser->time_strict) {
+                flb_error("[parser] cannot parse '%.*s' after %%L", tsize, time_str);
+                return -1;
+            }
+            flb_debug("[parser] non-exact match after %%L '%.*s'", tsize, time_str);
+            return 0;
         }
     }
 
