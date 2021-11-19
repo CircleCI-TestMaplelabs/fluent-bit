@@ -432,7 +432,7 @@ static int elasticsearch_format(struct flb_config *config,
             } else {
                 p = logstash_index + flb_sds_len(ctx->logstash_prefix);
             }
-            *p++ = '-';
+            //*p++ = '-';
 
             len = p - logstash_index;
             s = strftime(p, sizeof(logstash_index) - len - 1,
