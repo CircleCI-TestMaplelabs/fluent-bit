@@ -52,6 +52,8 @@
 #define ERR_CODE_ALREADY_EXISTS         "ResourceAlreadyExistsException"
 #define ERR_CODE_INVALID_SEQUENCE_TOKEN "InvalidSequenceTokenException"
 
+#define AMZN_REQUEST_ID_HEADER          "x-amzn-RequestId"
+
 #define ONE_DAY_IN_MILLISECONDS          86400000
 #define FOUR_HOURS_IN_SECONDS            14400
 
@@ -351,6 +353,33 @@ static void set_stream_time_span(struct log_stream *stream, struct cw_event *eve
     }
 }
 
+/*
+ * Truncate log if needed. If truncated, only `written` is modified
+ * returns FLB_TRUE if truncated
+ */
+static int truncate_log(const struct flb_cloudwatch *ctx, const char *log_buffer,
+                         size_t *written) {
+    size_t trailing_backslash_count = 0;
+
+    if (*written > MAX_EVENT_LEN) {
+        flb_plg_warn(ctx->ins, "[size=%zu] Truncating event which is larger than "
+                        "max size allowed by CloudWatch", *written);
+        *written = MAX_EVENT_LEN;
+
+        /* remove trailing unescaped backslash if inadvertently synthesized */
+        while (trailing_backslash_count < *written &&
+                log_buffer[(*written - 1) - trailing_backslash_count] == '\\') {
+            trailing_backslash_count++;
+        }
+        if (trailing_backslash_count % 2 == 1) {
+            /* odd number of trailing backslashes, remove unpaired backslash */
+            (*written)--;
+        }
+        return FLB_TRUE;
+    }
+    return FLB_FALSE;
+}
+
 
 /*
  * Processes the msgpack object
@@ -376,9 +405,9 @@ int process_event(struct flb_cloudwatch *ctx, struct cw_flush *buf,
     ret = flb_msgpack_to_json(tmp_buf_ptr,
                                   buf->tmp_buf_size - buf->tmp_buf_offset,
                                   obj);
-    if (ret < 0) {
+    if (ret <= 0) {
         /*
-         * negative value means failure to write to buffer,
+         * failure to write to buffer,
          * which means we ran out of space, and must send the logs
          */
         return 1;
@@ -420,24 +449,13 @@ int process_event(struct flb_cloudwatch *ctx, struct cw_flush *buf,
             return 1;
         }
 
-        if (written > MAX_EVENT_LEN) {
-            flb_plg_warn(ctx->ins, "[size=%zu] Truncating event which is larger than "
-                         "max size allowed by CloudWatch", written);
-            written = MAX_EVENT_LEN;
-        }
+        /* truncate log, if needed */
+        truncate_log(ctx, buf->event_buf, &written);
 
         /* copy serialized json to tmp_buf */
         if (!strncpy(tmp_buf_ptr, buf->event_buf, written)) {
             return -1;
         }
-
-        buf->tmp_buf_offset += written;
-        event = &buf->events[buf->event_index];
-        event->json = tmp_buf_ptr;
-        event->len = written;
-        event->timestamp = (unsigned long long) (tms->tm.tv_sec * 1000 +
-                                                 tms->tm.tv_nsec/1000000);
-
     }
     else {
         /*
@@ -446,21 +464,20 @@ int process_event(struct flb_cloudwatch *ctx, struct cw_flush *buf,
          * and last character
          */
         written -= 2;
-
-        if (written > MAX_EVENT_LEN) {
-            flb_plg_warn(ctx->ins, "[size=%zu] Truncating event which is larger than "
-                         "max size allowed by CloudWatch", written);
-            written = MAX_EVENT_LEN;
-        }
-
         tmp_buf_ptr++; /* pass over the opening quote */
-        buf->tmp_buf_offset += (written + 1);
-        event = &buf->events[buf->event_index];
-        event->json = tmp_buf_ptr;
-        event->len = written;
-        event->timestamp = (unsigned long long) (tms->tm.tv_sec * 1000 +
-                                                 tms->tm.tv_nsec/1000000);
+        buf->tmp_buf_offset++; /* advance tmp_buf past opening quote */
+
+        /* truncate log, if needed */
+        truncate_log(ctx, tmp_buf_ptr, &written);
     }
+
+    /* add log to events list */
+    buf->tmp_buf_offset += written;
+    event = &buf->events[buf->event_index];
+    event->json = tmp_buf_ptr;
+    event->len = written;
+    event->timestamp = (unsigned long long) (tms->tm.tv_sec * 1000ull +
+                                                tms->tm.tv_nsec/1000000);
 
     return 0;
 }
@@ -1296,6 +1313,7 @@ int put_log_events(struct flb_cloudwatch *ctx, struct cw_flush *buf,
     flb_sds_t tmp;
     flb_sds_t error;
     int num_headers = 1;
+    int retry = FLB_TRUE;
 
     buf->put_events_calls++;
 
@@ -1319,6 +1337,7 @@ int put_log_events(struct flb_cloudwatch *ctx, struct cw_flush *buf,
         num_headers = 2;
     }
 
+retry_request:
     if (plugin_under_test() == FLB_TRUE) {
         c = mock_http_call("TEST_PUT_LOG_EVENTS_ERROR", "PutLogEvents");
     }
@@ -1333,9 +1352,28 @@ int put_log_events(struct flb_cloudwatch *ctx, struct cw_flush *buf,
         flb_plg_debug(ctx->ins, "PutLogEvents http status=%d", c->resp.status);
 
         if (c->resp.status == 200) {
+            if (c->resp.data == NULL || c->resp.data_len == 0 || strstr(c->resp.data, AMZN_REQUEST_ID_HEADER) == NULL) {
+                /* code was 200, but response is invalid, treat as failure */
+                if (c->resp.data != NULL) {
+                    flb_plg_debug(ctx->ins, "Could not find sequence token in "
+                                  "response: response body is empty: full data: `%.*s`", c->resp.data_len, c->resp.data);
+                }
+                flb_http_client_destroy(c);
+
+                if (retry == FLB_TRUE) {
+                    flb_plg_debug(ctx->ins, "issuing immediate retry for invalid response");
+                    retry = FLB_FALSE;
+                    goto retry_request;
+                }
+                flb_plg_error(ctx->ins, "Recieved code 200 but response was invalid, %s header not found",
+                                  AMZN_REQUEST_ID_HEADER);
+                return -1;
+            }
+
+
             /* success */
-            flb_plg_debug(ctx->ins, "Sent events to %s", stream->name);
             if (c->resp.payload_size > 0) {
+                flb_plg_debug(ctx->ins, "Sent events to %s", stream->name);
                 tmp = flb_json_get_val(c->resp.payload, c->resp.payload_size,
                                        "nextSequenceToken");
                 if (tmp) {
@@ -1343,16 +1381,16 @@ int put_log_events(struct flb_cloudwatch *ctx, struct cw_flush *buf,
                         flb_sds_destroy(stream->sequence_token);
                     }
                     stream->sequence_token = tmp;
+
+                    flb_http_client_destroy(c);
+                    return 0;
                 }
                 else {
                     flb_plg_error(ctx->ins, "Could not find sequence token in "
                                   "response: %s", c->resp.payload);
                 }
             }
-            else {
-                flb_plg_error(ctx->ins, "Could not find sequence token in "
-                              "response: response body is empty");
-            }
+        
             flb_http_client_destroy(c);
             return 0;
         }

@@ -52,7 +52,7 @@ static flb_sds_t add_aws_auth(struct flb_http_client *c,
 
     flb_plg_debug(ctx->ins, "Signing request with AWS Sigv4");
 
-    /* Amazon ES Sigv4 does not allow the host header to include the port */
+    /* Amazon OpenSearch Sigv4 does not allow the host header to include the port */
     ret = flb_http_strip_port_from_host(c);
     if (ret < 0) {
         flb_plg_error(ctx->ins, "could not strip port from host for sigv4");
@@ -252,6 +252,7 @@ static int elasticsearch_format(struct flb_config *config,
     int index_len = 0;
     size_t s = 0;
     size_t off = 0;
+    size_t off_prev = 0;
     char *p;
     char *es_index;
     char logstash_index[256];
@@ -300,7 +301,7 @@ static int elasticsearch_format(struct flb_config *config,
     }
 
     /* Create the bulk composer */
-    bulk = es_bulk_create();
+    bulk = es_bulk_create(bytes);
     if (!bulk) {
         return -1;
     }
@@ -432,7 +433,7 @@ static int elasticsearch_format(struct flb_config *config,
             } else {
                 p = logstash_index + flb_sds_len(ctx->logstash_prefix);
             }
-            //*p++ = '-';
+            // *p++ = '-';
 
             len = p - logstash_index;
             s = strftime(p, sizeof(logstash_index) - len - 1,
@@ -534,8 +535,10 @@ static int elasticsearch_format(struct flb_config *config,
         }
 
         ret = es_bulk_append(bulk, j_index, index_len,
-                             out_buf, flb_sds_len(out_buf));
+                             out_buf, flb_sds_len(out_buf),
+                             bytes, off_prev);
         flb_sds_destroy(out_buf);
+        off_prev = off;
         if (ret == -1) {
             /* We likely ran out of memory, abort here */
             msgpack_unpacked_destroy(&result);
@@ -594,9 +597,9 @@ static int cb_es_init(struct flb_output_instance *ins,
 static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
                                      struct flb_http_client *c)
 {
-    int i;
+    int i, j, k;
     int ret;
-    int check = FLB_TRUE;
+    int check = FLB_FALSE;
     int root_type;
     char *out_buf;
     size_t off = 0;
@@ -605,6 +608,9 @@ static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
     msgpack_object root;
     msgpack_object key;
     msgpack_object val;
+    msgpack_object item;
+    msgpack_object item_key;
+    msgpack_object item_val;
 
     /*
      * Check if our payload is complete: there is such situations where
@@ -656,11 +662,7 @@ static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
             goto done;
         }
 
-        if (key.via.str.size != 6) {
-            continue;
-        }
-
-        if (strncmp(key.via.str.ptr, "errors", 6) == 0) {
+        if (key.via.str.size == 6 && strncmp(key.via.str.ptr, "errors", 6) == 0) {
             val = root.via.map.ptr[i].val;
             if (val.type != MSGPACK_OBJECT_BOOLEAN) {
                 flb_plg_error(ctx->ins, "unexpected 'error' value type=%i",
@@ -670,15 +672,70 @@ static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
             }
 
             /* If error == false, we are OK (no errors = FLB_FALSE) */
-            if (val.via.boolean) {
-                /* there is an error */
-                check = FLB_TRUE;
-                goto done;
-            }
-            else {
+            if (!val.via.boolean) {
                 /* no errors */
                 check = FLB_FALSE;
                 goto done;
+            }
+        }
+        else if (key.via.str.size == 5 && strncmp(key.via.str.ptr, "items", 5) == 0) {
+            val = root.via.map.ptr[i].val;
+            if (val.type != MSGPACK_OBJECT_ARRAY) {
+                flb_plg_error(ctx->ins, "unexpected 'items' value type=%i",
+                              val.type);
+                check = FLB_TRUE;
+                goto done;
+            }
+
+            for (j = 0; j < val.via.array.size; j++) {
+                item = val.via.array.ptr[j];
+                if (item.type != MSGPACK_OBJECT_MAP) {
+                    flb_plg_error(ctx->ins, "unexpected 'item' outer value type=%i",
+                                  item.type);
+                    check = FLB_TRUE;
+                    goto done;
+                }
+
+                if (item.via.map.size != 1) {
+                    flb_plg_error(ctx->ins, "unexpected 'item' size=%i",
+                                  item.via.map.size);
+                    check = FLB_TRUE;
+                    goto done;
+                }
+
+                item = item.via.map.ptr[0].val;
+                if (item.type != MSGPACK_OBJECT_MAP) {
+                    flb_plg_error(ctx->ins, "unexpected 'item' inner value type=%i",
+                                  item.type);
+                    check = FLB_TRUE;
+                    goto done;
+                }
+
+                for (k = 0; k < item.via.map.size; k++) {
+                    item_key = item.via.map.ptr[k].key;
+                    if (item_key.type != MSGPACK_OBJECT_STR) {
+                        flb_plg_error(ctx->ins, "unexpected key type=%i",
+                                      item_key.type);
+                        check = FLB_TRUE;
+                        goto done;
+                    }
+
+                    if (item_key.via.str.size == 6 && strncmp(item_key.via.str.ptr, "status", 6) == 0) {
+                        item_val = item.via.map.ptr[k].val;
+
+                        if (item_val.type != MSGPACK_OBJECT_POSITIVE_INTEGER) {
+                            flb_plg_error(ctx->ins, "unexpected 'status' value type=%i",
+                                          item_val.type);
+                            check = FLB_TRUE;
+                            goto done;
+                        }
+                        /* Check for errors other than version conflict (document already exists) */
+                        if (item_val.via.i64 != 409) {
+                            check = FLB_TRUE;
+                            goto done;
+                        }
+                    }
+                }
             }
         }
     }
@@ -689,8 +746,8 @@ static int elasticsearch_error_check(struct flb_elasticsearch *ctx,
     return check;
 }
 
-static void cb_es_flush(const void *data, size_t bytes,
-                        const char *tag, int tag_len,
+static void cb_es_flush(struct flb_event_chunk *event_chunk,
+                        struct flb_output_flush *out_flush,
                         struct flb_input_instance *ins, void *out_context,
                         struct flb_config *config)
 {
@@ -714,8 +771,8 @@ static void cb_es_flush(const void *data, size_t bytes,
     /* Convert format */
     ret = elasticsearch_format(config, ins,
                                ctx, NULL,
-                               tag, tag_len,
-                               data, bytes,
+                               event_chunk->tag, flb_sds_len(event_chunk->tag),
+                               event_chunk->data, event_chunk->size,
                                &out_buf, &out_size);
     if (ret != 0) {
         flb_upstream_conn_release(u_conn);
@@ -886,7 +943,7 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_STR, "aws_region", NULL,
      0, FLB_TRUE, offsetof(struct flb_elasticsearch, aws_region),
-     "AWS Region of your Amazon ElasticSearch Service cluster"
+     "AWS Region of your Amazon OpenSearch Service cluster"
     },
     {
      FLB_CONFIG_MAP_STR, "aws_sts_endpoint", NULL,
@@ -896,7 +953,7 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_STR, "aws_role_arn", NULL,
      0, FLB_FALSE, 0,
-     "AWS IAM Role to assume to put records to your Amazon ES cluster"
+     "AWS IAM Role to assume to put records to your Amazon OpenSearch cluster"
     },
     {
      FLB_CONFIG_MAP_STR, "aws_external_id", NULL,

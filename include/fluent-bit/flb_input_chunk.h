@@ -39,7 +39,19 @@
  */
 #define FLB_INPUT_CHUNK_FS_MAX_SIZE   2048000  /* 2MB */
 
+/* Number of bytes reserved for Metadata Header on Chunks */
+#define FLB_INPUT_CHUNK_META_HEADER   4
+
+/* Chunks magic bytes (starting from Fluent Bit v1.8.10) */
+#define FLB_INPUT_CHUNK_MAGIC_BYTE_0  (unsigned char) 0xF1
+#define FLB_INPUT_CHUNK_MAGIC_BYTE_1  (unsigned char) 0x77
+
+/* Chunk types: Log and Metrics are supported */
+#define FLB_INPUT_CHUNK_TYPE_LOG      0
+#define FLB_INPUT_CHUNK_TYPE_METRIC   1
+
 struct flb_input_chunk {
+    int event_type;                 /* chunk type: logs or metrics */
     int busy;                       /* buffer is being flushed  */
     int fs_backlog;                 /* chunk originated from fs backlog */
     int sp_done;                    /* sp already processed this chunk */
@@ -73,12 +85,15 @@ int flb_input_chunk_append_raw(struct flb_input_instance *in,
 const void *flb_input_chunk_flush(struct flb_input_chunk *ic, size_t *size);
 int flb_input_chunk_release_lock(struct flb_input_chunk *ic);
 flb_sds_t flb_input_chunk_get_name(struct flb_input_chunk *ic);
+int flb_input_chunk_get_event_type(struct flb_input_chunk *ic);
+
 int flb_input_chunk_get_tag(struct flb_input_chunk *ic,
                             const char **tag_buf, int *tag_len);
 ssize_t flb_input_chunk_get_size(struct flb_input_chunk *ic);
 size_t flb_input_chunk_set_limits(struct flb_input_instance *in);
 size_t flb_input_chunk_total_size(struct flb_input_instance *in);
 struct flb_input_chunk *flb_input_chunk_map(struct flb_input_instance *in,
+                                            int event_type,
                                             void *chunk);
 int flb_input_chunk_set_up_down(struct flb_input_chunk *ic);
 int flb_input_chunk_set_up(struct flb_input_chunk *ic);

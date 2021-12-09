@@ -702,7 +702,7 @@ static flb_sds_t syslog_format(struct flb_syslog *ctx, msgpack_object *o,
             msg.facility = 1;
         }
 
-        if (ctx->format == FLB_SYSLOG_RFC3164) {
+        if (ctx->parsed_format == FLB_SYSLOG_RFC3164) {
             tmp = syslog_rfc3164(s, tm, &msg);
         }
         else {
@@ -745,11 +745,11 @@ clean:
     return ret_sds;
 }
 
-static void cb_syslog_flush(const void *data, size_t bytes,
-                   const char *tag, int tag_len,
-                   struct flb_input_instance *i_ins,
-                   void *out_context,
-                   struct flb_config *config)
+static void cb_syslog_flush(struct flb_event_chunk *event_chunk,
+                            struct flb_output_flush *out_flush,
+                            struct flb_input_instance *i_ins,
+                            void *out_context,
+                            struct flb_config *config)
 {
     struct flb_syslog *ctx = out_context;
     flb_sds_t s;
@@ -780,7 +780,9 @@ static void cb_syslog_flush(const void *data, size_t bytes,
         FLB_OUTPUT_RETURN(FLB_ERROR);
     }
 
-    while (msgpack_unpack_next(&result, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS) {
+    while (msgpack_unpack_next(&result,
+                               event_chunk->data,
+                               event_chunk->size, &off) == MSGPACK_UNPACK_SUCCESS) {
         if (result.data.type != MSGPACK_OBJECT_ARRAY) {
             continue;
         }
@@ -851,7 +853,7 @@ static int cb_syslog_init(struct flb_output_instance *ins, struct flb_config *co
     }
 
     if (ctx->maxsize < 0) {
-        if (ctx->format == FLB_SYSLOG_RFC3164) {
+        if (ctx->parsed_format == FLB_SYSLOG_RFC3164) {
             ctx->maxsize = RFC3164_MAXSIZE;
         }
         else {

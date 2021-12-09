@@ -442,7 +442,7 @@ static inline int apply_lifting_rules(msgpack_packer * packer,
     int items_to_lift = map_count_fn(&map, ctx, &is_kv_to_lift);
 
     if (items_to_lift == 0) {
-        //flb_plg_debug(ctx->ins, "Lift : No match found for %s", ctx->key);
+        flb_plg_debug(ctx->ins, "Lift : No match found for %s", ctx->key);
         return 0;
     }
 
@@ -455,9 +455,9 @@ static inline int apply_lifting_rules(msgpack_packer * packer,
     int toplevel_items =
         (map.via.map.size - items_to_lift) + count_items_to_lift(&map, ctx);
 
-    // flb_plg_debug(ctx->ins, "Lift : Outer map size is %d, will be %d, "
-    //               "lifting %d record(s)",
-    //               map.via.map.size, toplevel_items, items_to_lift);
+    flb_plg_debug(ctx->ins, "Lift : Outer map size is %d, will be %d, "
+                  "lifting %d record(s)",
+                  map.via.map.size, toplevel_items, items_to_lift);
 
     /* Record array init(2) */
     msgpack_pack_array(packer, 2);
@@ -496,7 +496,7 @@ static inline int apply_nesting_rules(msgpack_packer *packer,
 
     size_t toplevel_items = (map.via.map.size - items_to_nest + 1);
 
-    flb_plg_debug(ctx->ins, "outer map size is %d, will be %lu, nested "
+    flb_plg_trace(ctx->ins, "outer map size is %d, will be %lu, nested "
                   "map size will be %lu",
                   map.via.map.size, toplevel_items, items_to_nest);
 
@@ -600,7 +600,7 @@ static int cb_nest_filter(const void *data, size_t bytes,
             total_modified_records += modified_records;
         }
         else {
-            // flb_plg_debug(ctx->ins, "Record is NOT an array, skipping");
+            flb_plg_debug(ctx->ins, "Record is NOT an array, skipping");
             msgpack_pack_object(&packer, result.data);
         }
     }

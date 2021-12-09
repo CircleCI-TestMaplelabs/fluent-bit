@@ -31,6 +31,11 @@
 #include <fluent-bit/flb_pack.h>
 #include <fluent-bit/flb_unescape.h>
 
+/* cmetrics */
+#include <cmetrics/cmetrics.h>
+#include <cmetrics/cmt_decode_msgpack.h>
+#include <cmetrics/cmt_encode_text.h>
+
 #include <msgpack.h>
 #include <jsmn/jsmn.h>
 
@@ -199,7 +204,7 @@ static char *tokens_to_msgpack(struct flb_pack_state *state,
                     msgpack_pack_double(&pck, atof(p));
                 }
                 else {
-                    msgpack_pack_int64(&pck, atol(p));
+                    msgpack_pack_int64(&pck, atoll(p));
                 }
             }
             break;
@@ -454,6 +459,32 @@ void flb_pack_print(const char *data, size_t bytes)
     msgpack_unpacked_destroy(&result);
 }
 
+void flb_pack_print_metrics(const char *data, size_t bytes)
+{
+    int ret;
+    size_t off = 0;
+    cmt_sds_t text;
+    struct cmt *cmt = NULL;
+
+    /* get cmetrics context */
+    ret = cmt_decode_msgpack_create(&cmt, (char *) data, bytes, &off);
+    if (ret != 0) {
+        flb_error("could not process metrics payload");
+        return;
+    }
+
+    /* convert to text representation */
+    text = cmt_encode_text_create(cmt);
+
+    /* destroy cmt context */
+    cmt_destroy(cmt);
+
+    printf("%s", text);
+    fflush(stdout);
+
+    cmt_encode_text_destroy(text);
+
+}
 
 static inline int try_to_write(char *buf, int *off, size_t left,
                                const char *str, size_t str_len)
@@ -706,6 +737,7 @@ flb_sds_t flb_msgpack_raw_to_json_sds(const void *in_buf, size_t in_size)
     ret = msgpack_unpack_next(&result, in_buf, in_size, &off);
     if (ret != MSGPACK_UNPACK_SUCCESS) {
         flb_sds_destroy(out_buf);
+        msgpack_unpacked_destroy(&result);
         return NULL;
     }
 
@@ -930,8 +962,9 @@ flb_sds_t flb_pack_msgpack_to_json_format(const char *data, uint64_t bytes,
             /* Encode current record into JSON in a temporary variable */
             out_js = flb_msgpack_raw_to_json_sds(tmp_sbuf.data, tmp_sbuf.size);
             if (!out_js) {
-                msgpack_sbuffer_destroy(&tmp_sbuf);
                 flb_sds_destroy(out_buf);
+                msgpack_sbuffer_destroy(&tmp_sbuf);
+                msgpack_unpacked_destroy(&result);
                 return NULL;
             }
 
@@ -941,9 +974,10 @@ flb_sds_t flb_pack_msgpack_to_json_format(const char *data, uint64_t bytes,
              */
             out_tmp = flb_sds_cat(out_buf, out_js, flb_sds_len(out_js));
             if (!out_tmp) {
-                msgpack_sbuffer_destroy(&tmp_sbuf);
                 flb_sds_destroy(out_js);
                 flb_sds_destroy(out_buf);
+                msgpack_sbuffer_destroy(&tmp_sbuf);
+                msgpack_unpacked_destroy(&result);
                 return NULL;
             }
 
@@ -959,8 +993,9 @@ flb_sds_t flb_pack_msgpack_to_json_format(const char *data, uint64_t bytes,
             if (json_format == FLB_PACK_JSON_FORMAT_LINES) {
                 out_tmp = flb_sds_cat(out_buf, "\n", 1);
                 if (!out_tmp) {
-                    msgpack_sbuffer_destroy(&tmp_sbuf);
                     flb_sds_destroy(out_buf);
+                    msgpack_sbuffer_destroy(&tmp_sbuf);
+                    msgpack_unpacked_destroy(&result);
                     return NULL;
                 }
                 if (out_tmp != out_buf) {
@@ -1074,7 +1109,9 @@ int flb_msgpack_expand_map(char *map_data, size_t map_size,
     }
 
     msgpack_unpacked_init(&result);
-    if ( (i=msgpack_unpack_next(&result, map_data, map_size, &off)) != MSGPACK_UNPACK_SUCCESS ){
+    if ((i=msgpack_unpack_next(&result, map_data, map_size, &off)) !=
+        MSGPACK_UNPACK_SUCCESS ) {
+        msgpack_unpacked_destroy(&result);
         return -1;
     }
     if (result.data.type != MSGPACK_OBJECT_MAP) {
@@ -1089,11 +1126,11 @@ int flb_msgpack_expand_map(char *map_data, size_t map_size,
     msgpack_packer_init(&pck, &sbuf, msgpack_sbuffer_write);
     msgpack_pack_map(&pck, map_num);
 
-    for(i=0; i<len; i++) {
+    for (i=0; i<len; i++) {
         msgpack_pack_object(&pck, result.data.via.map.ptr[i].key);
         msgpack_pack_object(&pck, result.data.via.map.ptr[i].val);
     }
-    for(i=0; i<kv_arr_len; i++){
+    for (i=0; i<kv_arr_len; i++){
         msgpack_pack_object(&pck, kv_arr[i]->key);
         msgpack_pack_object(&pck, kv_arr[i]->val);
     }

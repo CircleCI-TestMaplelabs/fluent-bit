@@ -82,8 +82,15 @@ struct flb_upstream {
     struct flb_tls *tls;
 #endif
 
+    struct flb_config *config;
     struct mk_list _head;
 };
+
+
+static inline int flb_upstream_is_shutting_down(struct flb_upstream *u)
+{
+    return u->config->is_shutting_down;
+}
 
 void flb_upstream_queue_init(struct flb_upstream_queue *uq);
 struct flb_upstream_queue *flb_upstream_queue_get(struct flb_upstream *u);
@@ -105,6 +112,6 @@ int flb_upstream_set_property(struct flb_config *config,
 int flb_upstream_is_async(struct flb_upstream *u);
 void flb_upstream_thread_safe(struct flb_upstream *u);
 struct mk_list *flb_upstream_get_config_map(struct flb_config *config);
-int flb_should_proxy_for_host(const char *host, const char *proxy, const char *no_proxy);
+int flb_upstream_needs_proxy(const char *host, const char *proxy, const char *no_proxy);
 
 #endif

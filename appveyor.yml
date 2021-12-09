@@ -3,8 +3,8 @@ version: v1-winbuild-{build}
 image: Visual Studio 2019
 
 platform:
-  - Win32
   - x64
+  - Win32
 
 environment:
   vspath: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community'
@@ -13,6 +13,11 @@ environment:
 
 configuration:
   - Release
+  
+skip_commits:
+  message: /workflows/
+  files:
+    - '.github/**'
 
 install:
   - ps: Invoke-WebRequest -O winflexbison.zip $env:winflexbison
@@ -21,6 +26,8 @@ install:
   - ps: Copy-Item -Path /WinFlexBison/win_flex.exe /WinFlexBison/flex.exe
 
 before_build:
+  - git clone --depth=1 https://github.com/calyptia/fluent-bit-ci.git ci
+  - ps: Copy-Item -Path .\ci\scripts\run-unit-tests.ps1 .\ci\do-ut.ps1
   - if %PLATFORM%==Win32 call "%vspath%\VC\Auxiliary\Build\vcvars32.bat"
   - if %PLATFORM%==x64   call "%vspatH%\VC\Auxiliary\Build\vcvars64.bat"
 
@@ -30,7 +37,7 @@ build_script:
   - cpack
 
 artifacts:
-  - path: build/td-agent-bit-*.exe
-    name: td-agent-bit
-  - path: build/td-agent-bit-*.zip
-    name: td-agent-bit-zip
+  - path: build/fluent-bit*.exe
+    name: fluent-bit.exe
+  - path: build/fluent-bit*.zip
+    name: fluent-bit-zip

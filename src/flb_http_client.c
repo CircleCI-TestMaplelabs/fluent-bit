@@ -229,6 +229,9 @@ static int check_connection(struct flb_http_client *c)
     if (ret == FLB_HTTP_NOT_FOUND) {
         return FLB_HTTP_NOT_FOUND;
     }
+    else if (ret == FLB_HTTP_MORE) {
+        return FLB_HTTP_MORE;
+    }
 
     buf = flb_malloc(len + 1);
     if (!buf) {
@@ -389,6 +392,9 @@ static int process_data(struct flb_http_client *c)
         memcpy(code, c->resp.data + 9, 3);
         code[3] = '\0';
         c->resp.status = atoi(code);
+        if (c->resp.status < 100 || c->resp.status > 599) {
+            return FLB_HTTP_ERROR;
+        }
     }
 
     /* Try to lookup content length */
@@ -652,6 +658,9 @@ struct flb_http_client *flb_http_client(struct flb_upstream_conn *u_conn,
         break;
     case FLB_HTTP_CONNECT:
         str_method = "CONNECT";
+        break;
+    case FLB_HTTP_PATCH:
+        str_method = "PATCH";
         break;
     };
 
@@ -1122,6 +1131,7 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
         new_size = c->header_size + 2;
         tmp = flb_realloc(c->header_buf, new_size);
         if (!tmp) {
+            flb_errno();
             return -1;
         }
         c->header_buf  = tmp;
@@ -1142,7 +1152,6 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
     }
 #endif
 
-    flb_debug("[http_client] header=%s", c->header_buf);
     /* Write the header */
     ret = flb_io_net_write(c->u_conn,
                            c->header_buf, c->header_len,
@@ -1184,6 +1193,10 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
                  * We could not allocate more space, let the caller handle
                  * this.
                  */
+                flb_warn("[http_client] cannot increase buffer: current=%zu "
+                         "requested=%zu max=%zu", c->resp.data_size,
+                         c->resp.data_size + FLB_HTTP_DATA_CHUNK,
+                         c->resp.data_size_max);
                 flb_upstream_conn_recycle(c->u_conn, FLB_FALSE);
                 return 0;
             }
@@ -1206,6 +1219,9 @@ int flb_http_do(struct flb_http_client *c, size_t *bytes)
 
             ret = process_data(c);
             if (ret == FLB_HTTP_ERROR) {
+                flb_warn("[http_client] malformed HTTP response from %s:%i on "
+                         "connection #%i", c->u_conn->u->tcp_host,
+                         c->u_conn->u->tcp_port, c->u_conn->fd);
                 return -1;
             }
             else if (ret == FLB_HTTP_OK) {

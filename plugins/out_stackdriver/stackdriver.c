@@ -40,6 +40,67 @@
 #include <mbedtls/base64.h>
 #include <mbedtls/sha256.h>
 
+pthread_key_t oauth2_type;
+pthread_key_t oauth2_token;
+
+static void oauth2_cache_exit(void *ptr)
+{
+    if (ptr) {
+        flb_sds_destroy(ptr);
+    }
+}
+
+static void oauth2_cache_init()
+{
+    /* oauth2 pthread key */
+    pthread_key_create(&oauth2_type, oauth2_cache_exit);
+    pthread_key_create(&oauth2_token, oauth2_cache_exit);
+}
+
+/* Set oauth2 type and token in pthread keys */
+static void oauth2_cache_set(char *type, char *token)
+{
+    flb_sds_t tmp;
+
+    /* oauth2 type */
+    tmp = pthread_getspecific(oauth2_type);
+    if (tmp) {
+        flb_sds_destroy(tmp);
+    }
+    tmp = flb_sds_create(type);
+    pthread_setspecific(oauth2_type, tmp);
+
+    /* oauth2 access token */
+    tmp = pthread_getspecific(oauth2_token);
+    if (tmp) {
+        flb_sds_destroy(tmp);
+    }
+    tmp = flb_sds_create(token);
+    pthread_setspecific(oauth2_token, tmp);
+}
+
+/* By using pthread keys cached values, compose the authorizatoin token */
+static flb_sds_t oauth2_cache_to_token()
+{
+    flb_sds_t type;
+    flb_sds_t token;
+    flb_sds_t output;
+
+    type = pthread_getspecific(oauth2_type);
+    if (!type) {
+        return NULL;
+    }
+
+    output = flb_sds_create(type);
+    if (!output) {
+        return NULL;
+    }
+
+    token = pthread_getspecific(oauth2_token);
+    flb_sds_printf(&output, " %s", token);
+    return output;
+}
+
 /*
  * Base64 Encoding in JWT must:
  *
@@ -264,7 +325,18 @@ static flb_sds_t get_google_token(struct flb_stackdriver *ctx)
     int ret = 0;
     flb_sds_t output = NULL;
 
-    if (pthread_mutex_lock(&ctx->token_mutex)){
+    ret = pthread_mutex_trylock(&ctx->token_mutex);
+    if (ret == EBUSY) {
+        /*
+         * If the routine is locked we just use our pre-cached values and
+         * compose the expected authorization value.
+         *
+         * If the routine fails it will return NULL and the caller will just
+         * issue a FLB_RETRY.
+         */
+        return oauth2_cache_to_token();
+    }
+    else if (ret != 0) {
         flb_plg_error(ctx->ins, "error locking mutex");
         return NULL;
     }
@@ -275,7 +347,11 @@ static flb_sds_t get_google_token(struct flb_stackdriver *ctx)
 
     /* Copy string to prevent race conditions (get_oauth2 can free the string) */
     if (ret == 0) {
-        output = flb_sds_create(ctx->o->access_token);
+        /* Update pthread keys cached values */
+        oauth2_cache_set(ctx->o->token_type, ctx->o->access_token);
+
+        /* Compose outgoing buffer using cached values */
+        output = oauth2_cache_to_token();
     }
 
     if (pthread_mutex_unlock(&ctx->token_mutex)){
@@ -727,6 +803,95 @@ static int set_monitored_resource_labels(struct flb_stackdriver *ctx, char *type
     return -1;
 }
 
+static int is_tag_match_regex(struct flb_stackdriver *ctx,
+                              const char *tag, int tag_len)
+{
+    int ret;
+    int tag_prefix_len;
+    int len_to_be_matched;
+    const char *tag_str_to_be_matcheds;
+
+    tag_prefix_len = flb_sds_len(ctx->tag_prefix);
+    if (tag_len > tag_prefix_len &&
+        flb_sds_cmp(ctx->tag_prefix, tag, tag_prefix_len) != 0) {
+        return 0;
+    }
+
+    tag_str_to_be_matcheds = tag + tag_prefix_len;
+    len_to_be_matched = tag_len - tag_prefix_len;
+    ret = flb_regex_match(ctx->regex,
+                          (unsigned char *) tag_str_to_be_matcheds,
+                          len_to_be_matched);
+
+    /* 1 -> match;  0 -> doesn't match;  < 0 -> error */
+    return ret;
+}
+
+static int is_local_resource_id_match_regex(struct flb_stackdriver *ctx)
+{
+    int ret;
+    int prefix_len;
+    int len_to_be_matched;
+    const char *str_to_be_matcheds;
+
+    if (!ctx->local_resource_id) {
+        flb_plg_warn(ctx->ins, "local_resource_id not found in the payload");
+        return -1;
+    }
+
+    prefix_len = flb_sds_len(ctx->tag_prefix);
+    str_to_be_matcheds = ctx->local_resource_id + prefix_len;
+    len_to_be_matched = flb_sds_len(ctx->local_resource_id) - prefix_len;
+
+    ret = flb_regex_match(ctx->regex,
+                          (unsigned char *) str_to_be_matcheds,
+                          len_to_be_matched);
+
+    /* 1 -> match;  0 -> doesn't match;  < 0 -> error */
+    return ret;
+}
+
+static void cb_results(const char *name, const char *value,
+                       size_t vlen, void *data);
+/*
+ * extract_resource_labels_from_regex(4) will only be called if the
+ * tag or local_resource_id field matches the regex rule
+ */
+static int extract_resource_labels_from_regex(struct flb_stackdriver *ctx,
+                                              const char *tag, int tag_len,
+                                              int from_tag)
+{
+    int ret = 1;
+    int prefix_len;
+    int len_to_be_matched;
+    int local_resource_id_len;
+    const char *str_to_be_matcheds;
+    struct flb_regex_search result;
+
+    prefix_len = flb_sds_len(ctx->tag_prefix);
+    if (from_tag == FLB_TRUE) {
+        local_resource_id_len = tag_len;
+        str_to_be_matcheds = tag + prefix_len;
+    }
+    else {
+        // this will be called only if the payload contains local_resource_id
+        local_resource_id_len = flb_sds_len(ctx->local_resource_id);
+        str_to_be_matcheds = ctx->local_resource_id + prefix_len;
+    }
+
+    len_to_be_matched = local_resource_id_len - prefix_len;
+    ret = flb_regex_do(ctx->regex, str_to_be_matcheds, len_to_be_matched, &result);
+    if (ret <= 0) {
+        flb_plg_warn(ctx->ins, "invalid pattern for given value %s when"
+                     " extracting resource labels", str_to_be_matcheds);
+        return -1;
+    }
+
+    flb_regex_parse(ctx->regex, &result, cb_results, ctx);
+
+    return ret;
+}
+
 static int process_local_resource_id(struct flb_stackdriver *ctx,
                                      const char *tag, int tag_len, char *type)
 {
@@ -831,88 +996,6 @@ int flb_stackdriver_regex_init(struct flb_stackdriver *ctx)
     return 0;
 }
 
-int is_tag_match_regex(struct flb_stackdriver *ctx, const char *tag, int tag_len)
-{
-    int ret;
-    int tag_prefix_len;
-    int len_to_be_matched;
-    const char *tag_str_to_be_matcheds;
-
-    tag_prefix_len = flb_sds_len(ctx->tag_prefix);
-    tag_str_to_be_matcheds = tag + tag_prefix_len;
-    len_to_be_matched = tag_len - tag_prefix_len;
-
-    ret = flb_regex_match(ctx->regex,
-                          (unsigned char *) tag_str_to_be_matcheds,
-                          len_to_be_matched);
-                          
-    /* 1 -> match;  0 -> doesn't match;  < 0 -> error */
-    return ret;
-}
-
-int is_local_resource_id_match_regex(struct flb_stackdriver *ctx)
-{
-    int ret;
-    int prefix_len;
-    int len_to_be_matched;
-    const char *str_to_be_matcheds;
-
-    if (!ctx->local_resource_id) {
-        flb_plg_warn(ctx->ins, "local_resource_id not found in the payload");
-        return -1;
-    }
-
-    prefix_len = flb_sds_len(ctx->tag_prefix);
-    str_to_be_matcheds = ctx->local_resource_id + prefix_len;
-    len_to_be_matched = flb_sds_len(ctx->local_resource_id) - prefix_len;
-
-    ret = flb_regex_match(ctx->regex,
-                          (unsigned char *) str_to_be_matcheds,
-                          len_to_be_matched);
-    
-    /* 1 -> match;  0 -> doesn't match;  < 0 -> error */
-    return ret;
-}
-
-/* 
- * extract_resource_labels_from_regex(4) will only be called if the
- * tag or local_resource_id field matches the regex rule
- */
-int extract_resource_labels_from_regex(struct flb_stackdriver *ctx,
-                                       const char *tag, int tag_len,
-                                       int from_tag)
-{
-    int ret = 1;
-    int prefix_len;
-    int len_to_be_matched;
-    int local_resource_id_len;
-    const char *str_to_be_matcheds;
-    struct flb_regex_search result;
-
-    prefix_len = flb_sds_len(ctx->tag_prefix);
-    if (from_tag == FLB_TRUE) {
-        local_resource_id_len = tag_len;
-        str_to_be_matcheds = tag + prefix_len;
-    }
-    else {
-        // this will be called only if the payload contains local_resource_id
-        local_resource_id_len = flb_sds_len(ctx->local_resource_id);
-        str_to_be_matcheds = ctx->local_resource_id + prefix_len;
-    }
-
-    len_to_be_matched = local_resource_id_len - prefix_len;
-    ret = flb_regex_do(ctx->regex, str_to_be_matcheds, len_to_be_matched, &result);
-    if (ret <= 0) {
-        flb_plg_warn(ctx->ins, "invalid pattern for given value %s when"
-                     " extracting resource labels", str_to_be_matcheds);
-        return -1;
-    }
-
-    flb_regex_parse(ctx->regex, &result, cb_results, ctx);
-
-    return ret;
-}
-
 static int cb_stackdriver_init(struct flb_output_instance *ins,
                           struct flb_config *config, void *data)
 {
@@ -942,8 +1025,11 @@ static int cb_stackdriver_init(struct flb_output_instance *ins,
         io_flags |= FLB_IO_IPV6;
     }
 
+    /* Initialize oauth2 cache pthread keys */
+    oauth2_cache_init();
+
     /* Create mutex for acquiring oauth tokens (they are shared across flush coroutines) */
-    pthread_mutex_init ( &ctx->token_mutex, NULL);
+    pthread_mutex_init(&ctx->token_mutex, NULL);
 
     /* Create Upstream context for Stackdriver Logging (no oauth2 service) */
     ctx->u = flb_upstream_create_url(config, FLB_STD_WRITE_URL,
@@ -976,7 +1062,8 @@ static int cb_stackdriver_init(struct flb_output_instance *ins,
         token = get_google_token(ctx);
         if (!token) {
             flb_plg_warn(ctx->ins, "token retrieval failed");
-        } else {
+        }
+        else {
             flb_sds_destroy(token);
         }
     }
@@ -1286,8 +1373,8 @@ static int pack_json_payload(int insert_id_extracted,
             continue;
         }
 
-        if (validate_key(kv->key, HTTPREQUEST_FIELD_IN_JSON,
-                         HTTP_REQUEST_KEY_SIZE)
+        if (validate_key(kv->key, ctx->http_request_key,
+                         ctx->http_request_key_size)
             && kv->val.type == MSGPACK_OBJECT_MAP) {
 
             if(http_request_extra_size > 0) {
@@ -1985,19 +2072,8 @@ static int stackdriver_format(struct flb_config *config,
     return 0;
 }
 
-static void set_authorization_header(struct flb_http_client *c,
-                                     char *token)
-{
-    int len;
-    char header[512];
-
-    len = snprintf(header, sizeof(header) - 1,
-                   "Bearer %s", token);
-    flb_http_add_header(c, "Authorization", 13, header, len);
-}
-
-static void cb_stackdriver_flush(const void *data, size_t bytes,
-                                 const char *tag, int tag_len,
+static void cb_stackdriver_flush(struct flb_event_chunk *event_chunk,
+                                 struct flb_output_flush *out_flush,
                                  struct flb_input_instance *i_ins,
                                  void *out_context,
                                  struct flb_config *config)
@@ -2015,20 +2091,38 @@ static void cb_stackdriver_flush(const void *data, size_t bytes,
     struct flb_stackdriver *ctx = out_context;
     struct flb_upstream_conn *u_conn;
     struct flb_http_client *c;
+#ifdef FLB_HAVE_METRICS
+    char *name = (char *) flb_output_name(ctx->ins);
+    uint64_t ts = cmt_time_now();
+#endif
 
     /* Get upstream connection */
     u_conn = flb_upstream_conn_get(ctx->u);
     if (!u_conn) {
+#ifdef FLB_HAVE_METRICS
+        cmt_counter_inc(ctx->cmt_failed_requests,
+                        ts, 1, (char *[]) {name});
+
+        /* OLD api */
+        flb_metrics_sum(FLB_STACKDRIVER_FAILED_REQUESTS, 1, ctx->ins->metrics);
+#endif
         FLB_OUTPUT_RETURN(FLB_RETRY);
     }
 
     /* Reformat msgpack to stackdriver JSON payload */
     ret = stackdriver_format(config, i_ins,
                              ctx, NULL,
-                             tag, tag_len,
-                             data, bytes,
+                             event_chunk->tag, flb_sds_len(event_chunk->tag),
+                             event_chunk->data, event_chunk->size,
                              &out_buf, &out_size);
     if (ret != 0) {
+#ifdef FLB_HAVE_METRICS
+        cmt_counter_inc(ctx->cmt_failed_requests,
+                        ts, 1, (char *[]) {name});
+
+        /* OLD api */
+        flb_metrics_sum(FLB_STACKDRIVER_FAILED_REQUESTS, 1, ctx->ins->metrics);
+#endif
         flb_upstream_conn_release(u_conn);
         FLB_OUTPUT_RETURN(FLB_RETRY);
     }
@@ -2042,6 +2136,13 @@ static void cb_stackdriver_flush(const void *data, size_t bytes,
         flb_plg_error(ctx->ins, "cannot retrieve oauth2 token");
         flb_upstream_conn_release(u_conn);
         flb_sds_destroy(payload_buf);
+#ifdef FLB_HAVE_METRICS
+        cmt_counter_inc(ctx->cmt_failed_requests,
+                        ts, 1, (char *[]) {name});
+
+        /* OLD api */
+        flb_metrics_sum(FLB_STACKDRIVER_FAILED_REQUESTS, 1, ctx->ins->metrics);
+#endif
         FLB_OUTPUT_RETURN(FLB_RETRY);
     }
 
@@ -2061,9 +2162,7 @@ static void cb_stackdriver_flush(const void *data, size_t bytes,
     }
 
     flb_http_add_header(c, "Content-Type", 12, "application/json", 16);
-
-    /* Compose and append Authorization header */
-    set_authorization_header(c, token);
+    flb_http_add_header(c, "Authorization", 13, token, flb_sds_len(token));
 
     /* Send HTTP request */
     ret = flb_http_do(c, &b_sent);
@@ -2079,6 +2178,11 @@ static void cb_stackdriver_flush(const void *data, size_t bytes,
         if (c->resp.status == 200) {
             ret_code = FLB_OK;
         }
+        else if (c->resp.status >= 400 && c->resp.status < 500) {
+            ret_code = FLB_ERROR;
+            flb_plg_warn(ctx->ins, "error\n%s",
+                c->resp.payload);
+        }
         else {
             if (c->resp.payload_size > 0) {
                 /* we got an error */
@@ -2092,6 +2196,24 @@ static void cb_stackdriver_flush(const void *data, size_t bytes,
             ret_code = FLB_RETRY;
         }
     }
+
+    /* Update specific stackdriver metrics */
+#ifdef FLB_HAVE_METRICS
+    if (ret_code == FLB_OK) {
+        cmt_counter_inc(ctx->cmt_successful_requests,
+                        ts, 1, (char *[]) {name});
+
+        /* OLD api */
+        flb_metrics_sum(FLB_STACKDRIVER_SUCCESSFUL_REQUESTS, 1, ctx->ins->metrics);
+    }
+    else {
+        cmt_counter_inc(ctx->cmt_failed_requests,
+                        ts, 1, (char *[]) {name});
+
+        /* OLD api */
+        flb_metrics_sum(FLB_STACKDRIVER_FAILED_REQUESTS, 1, ctx->ins->metrics);
+    }
+#endif
 
     /* Cleanup */
     flb_sds_destroy(payload_buf);
