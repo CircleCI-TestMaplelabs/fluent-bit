@@ -25,13 +25,50 @@ struct flb_in_kafka_config
     flb_sds_t group_id;
     flb_sds_t message_key;
     flb_sds_t include_topic_name_in_record;
+    
+    // SASL Auth
     flb_sds_t sasl_mechanism;
+    flb_sds_t sasl_username;
+    flb_sds_t sasl_password;
+    
+    //SSL
     flb_sds_t security_protocol;
-    flb_sds_t sasl_jaas_config;
-    flb_sds_t ssl_truststore_location;
-    flb_sds_t ssl_truststore_password;
-    flb_sds_t ssl_enabled_protocols;
     flb_sds_t ssl_protocol;
+    flb_sds_t ssl_ca_location;
+    flb_sds_t ssl_ca_pem;
+    flb_sds_t ssl_ca_certificate_stores;
+    flb_sds_t ssl_crl_location;
+    flb_sds_t ssl_engine_location;
+    flb_sds_t ssl_engine_id;
+    flb_sds_t enable_ssl_certificate_verification;
+    flb_sds_t ssl_endpoint_identification_algorithm;
+    flb_sds_t ssl_certificate_verify_cb;
+    flb_sds_t ssl_certificate_location;
+    flb_sds_t ssl_certificate_pem;
+    flb_sds_t ssl_key;
+    flb_sds_t ssl_key_location;
+    flb_sds_t ssl_key_password;
+    flb_sds_t ssl_enabled_protocols;
+    flb_sds_t ssl_cipher_suites;
+    flb_sds_t ssl_curves_list;
+    flb_sds_t ssl_sigalgs_list;
+
+    //Kerberos
+    flb_sds_t sasl_kerberos_keytab;
+    flb_sds_t sasl_kerberos_service_name;
+    flb_sds_t sasl_kerberos_principal;
+    flb_sds_t sasl_kerberos_kinit_cmd;
+    flb_sds_t sasl_kerberos_min_time_before_relogin;
+
+    //oauth
+    flb_sds_t sasl_oauthbearer_config;
+    flb_sds_t enable_sasl_oauthbearer_unsecure_jwt;
+    flb_sds_t sasl_oauthbearer_method;
+    flb_sds_t sasl_oauthbearer_client_id;
+    flb_sds_t sasl_oauthbearer_client_secret;
+    flb_sds_t sasl_oauthbearer_scope;
+    flb_sds_t sasl_oauthbearer_extensions;
+    flb_sds_t sasl_oauthbearer_token_endpoint_url;
     /* Internal */
     rd_kafka_conf_t *conf;
     rd_kafka_t *rk;

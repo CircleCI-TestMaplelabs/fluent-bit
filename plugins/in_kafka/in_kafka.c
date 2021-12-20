@@ -93,6 +93,27 @@ static int set_config_kafka_client(struct flb_in_kafka_config *ctx)
         }
     }
 
+    if (ctx->sasl_username)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.username", ctx->sasl_username, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.username property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_password)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.password", ctx->sasl_password, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.password property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+
     if (ctx->security_protocol)
     {
         if (rd_kafka_conf_set(ctx->conf, "security.protocol", ctx->security_protocol, errstr,
@@ -103,22 +124,154 @@ static int set_config_kafka_client(struct flb_in_kafka_config *ctx)
             return -1;
         }
     }
-    if (ctx->ssl_truststore_location)
+
+    if (ctx->ssl_protocol)
     {
-        if (rd_kafka_conf_set(ctx->conf, "ssl.truststore.location", ctx->ssl_truststore_location, errstr,
+        if (rd_kafka_conf_set(ctx->conf, "ssl.protocol", ctx->ssl_protocol, errstr,
                           sizeof(errstr)) != RD_KAFKA_CONF_OK)
         {
-            flb_plg_error(ctx->ins, "Error in configuring ssl.truststore.location property: %s\n", errstr);
+            flb_plg_error(ctx->ins, "Error in configuring in ssl.protocol property %s\n", errstr);
             rd_kafka_conf_destroy(ctx->conf);
             return -1;
         }
     }
-    if (ctx->ssl_truststore_password)
+    if (ctx->ssl_ca_location)
     {
-        if (rd_kafka_conf_set(ctx->conf, "ssl.truststore.password", ctx->ssl_truststore_password, errstr,
+
+        if (rd_kafka_conf_set(ctx->conf, "ssl.ca.location", ctx->ssl_ca_location, errstr,
                           sizeof(errstr)) != RD_KAFKA_CONF_OK)
         {
-            flb_plg_error(ctx->ins, "Error in configuring ssl.truststore.password property: %s\n", errstr);
+            flb_plg_error(ctx->ins, "Error in configuring ssl.ca.location property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_ca_pem)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.ca.pem", ctx->ssl_ca_pem, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.ca.pem property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_ca_certificate_stores)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.ca.certificate.stores", ctx->ssl_ca_certificate_stores, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.ca.certificate.stores property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_crl_location)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.crl.location", ctx->ssl_crl_location, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.crl.location property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_engine_location)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.engine.location", ctx->ssl_engine_location, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.engine.location property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_engine_id)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.engine.id", ctx->ssl_engine_id, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.engine.id property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->enable_ssl_certificate_verification)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "enable.ssl.certificate.verification", ctx->enable_ssl_certificate_verification, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring enable.ssl.certificate.verification property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_endpoint_identification_algorithm)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.endpoint.identification.algorithm", ctx->ssl_endpoint_identification_algorithm, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.endpoint.identification.algorithm property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_certificate_verify_cb)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.certificate.verify.cb", ctx->ssl_certificate_verify_cb, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.certificate.verify.cb property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_certificate_location)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.certificate.location", ctx->ssl_certificate_location, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.certificate.location property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_certificate_pem)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.certificate.pem", ctx->ssl_certificate_pem, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.certificate.pem property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_key)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.key", ctx->ssl_key, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.key property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_key_location)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.key.location", ctx->ssl_key_location, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.key.location property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_key_password)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.key.password", ctx->ssl_key_password, errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.key.password property: %s\n", errstr);
             rd_kafka_conf_destroy(ctx->conf);
             return -1;
         }
@@ -133,12 +286,152 @@ static int set_config_kafka_client(struct flb_in_kafka_config *ctx)
             return -1;
         }
     }
-    if (ctx->ssl_protocol)
+    if (ctx->ssl_cipher_suites)
     {
-        if (rd_kafka_conf_set(ctx->conf, "ssl.protocol", ctx->ssl_protocol, errstr,
+        if (rd_kafka_conf_set(ctx->conf, "ssl.cipher.suites", ctx->ssl_cipher_suites , errstr,
                           sizeof(errstr)) != RD_KAFKA_CONF_OK)
         {
-            flb_plg_error(ctx->ins, "Error in configuring in ssl.protocol property %s\n", errstr);
+            flb_plg_error(ctx->ins, "Error in configuring ssl.cipher.suites property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_curves_list)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.curves.list", ctx->ssl_curves_list , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.curves.list property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->ssl_sigalgs_list)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "ssl.sigalgs.list", ctx->ssl_sigalgs_list , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring ssl.sigalgs.list property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_kerberos_keytab)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.kerberos.keytab", ctx->sasl_kerberos_keytab , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.kerberos.keytab property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_kerberos_service_name)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.kerberos.service.name", ctx->sasl_kerberos_service_name , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.kerberos.service.name property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_kerberos_principal)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.kerberos.principal", ctx->sasl_kerberos_principal , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.kerberos.principal property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_kerberos_kinit_cmd)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.kerberos.kinit.cmd", ctx->sasl_kerberos_kinit_cmd , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.kerberos.kinit.cmd property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+     if (ctx->sasl_kerberos_min_time_before_relogin)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.kerberos.min.time.before.relogin", ctx->sasl_kerberos_min_time_before_relogin , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.kerberos.min.time.before.relogin property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+     if (ctx->sasl_oauthbearer_config)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.config", ctx->sasl_oauthbearer_config , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.config property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->enable_sasl_oauthbearer_unsecure_jwt)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "enable.sasl.oauthbearer.unsecure.jwt", ctx->enable_sasl_oauthbearer_unsecure_jwt , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring enable.sasl.oauthbearer.unsecure.jwt property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+     if (ctx->sasl_oauthbearer_method)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.method", ctx->sasl_oauthbearer_method , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.method property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_oauthbearer_client_secret)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.client.secret", ctx->sasl_oauthbearer_client_secret , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.client.secret property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_oauthbearer_scope)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.scope", ctx->sasl_oauthbearer_scope , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.scope property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_oauthbearer_extensions)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.extensions", ctx->sasl_oauthbearer_extensions , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.extensions property: %s\n", errstr);
+            rd_kafka_conf_destroy(ctx->conf);
+            return -1;
+        }
+    }
+    if (ctx->sasl_oauthbearer_token_endpoint_url)
+    {
+        if (rd_kafka_conf_set(ctx->conf, "sasl.oauthbearer.token.endpoint.url", ctx->sasl_oauthbearer_token_endpoint_url , errstr,
+                          sizeof(errstr)) != RD_KAFKA_CONF_OK)
+        {
+            flb_plg_error(ctx->ins, "Error in configuring sasl.oauthbearer.token.endpoint.url property: %s\n", errstr);
             rd_kafka_conf_destroy(ctx->conf);
             return -1;
         }
@@ -345,27 +638,119 @@ static struct flb_config_map config_map[] = {
     {FLB_CONFIG_MAP_STR, "group_id", DEFAULT_GROUP_ID,
      0, FLB_TRUE, offsetof(struct flb_in_kafka_config, group_id),
      "Optional GroupID"},
+
     {FLB_CONFIG_MAP_STR, "sasl_mechanism", NULL,
      0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_mechanism),
-     "kafka consumer property sasl_mechanism"},
+     "kafka consumer property sasl.mechanism"},
+    {FLB_CONFIG_MAP_STR, "sasl_username", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_username),
+     "kafka consumer property sasl.username"},
+    {FLB_CONFIG_MAP_STR, "sasl_password", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_password),
+     "kafka consumer property sasl.password"},
+
     {FLB_CONFIG_MAP_STR, "security_protocol", NULL,
      0, FLB_TRUE, offsetof(struct flb_in_kafka_config, security_protocol),
      "kafka consumer property: security.protocol"},
-    {FLB_CONFIG_MAP_STR, "sasl_jaas_config", NULL,
-     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_jaas_config),
-     "kafka consumer property: sasl.jaas.config"},
-    {FLB_CONFIG_MAP_STR, "ssl_truststore_location", NULL,
-     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_truststore_location),
-     "kafka consumer property: ssl.truststore.location"},
-    {FLB_CONFIG_MAP_STR, "ssl_truststore_password", NULL,
-     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_truststore_password),
-     "kafka consumer property: ssl.truststore.password"},
-    {FLB_CONFIG_MAP_STR, "ssl_enabled_protocols", NULL,
-     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_enabled_protocols),
-     "kafka consumer property: ssl.enabled.protocols"},
     {FLB_CONFIG_MAP_STR, "ssl_protocol", NULL,
      0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_protocol),
      "kafka consumer property: ssl.protocol"},
+    {FLB_CONFIG_MAP_STR, "ssl_ca_location", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_ca_location),
+     "kafka consumer property: ssl_ca_location"},
+    {FLB_CONFIG_MAP_STR, "ssl_ca_pem", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_ca_pem),
+     "kafka consumer property: ssl_ca_pem"},
+    {FLB_CONFIG_MAP_STR, "ssl_ca_certificate_stores", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_ca_certificate_stores),
+     "kafka consumer property: ssl_ca_certificate_stores"},
+    {FLB_CONFIG_MAP_STR, "ssl_crl_location", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_crl_location),
+     "kafka consumer property: ssl_crl_location"},
+     {FLB_CONFIG_MAP_STR, "ssl_engine_location", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_engine_location),
+     "kafka consumer property: ssl_engine_location"},
+    {FLB_CONFIG_MAP_STR, "ssl_engine_id", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_engine_id),
+     "kafka consumer property: ssl_engine_id"},
+    {FLB_CONFIG_MAP_STR, "enable_ssl_certificate_verification", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, enable_ssl_certificate_verification),
+     "kafka consumer property: enable_ssl_certificate_verification"},
+    {FLB_CONFIG_MAP_STR, "ssl_endpoint_identification_algorithm", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_endpoint_identification_algorithm),
+     "kafka consumer property: ssl_endpoint_identification_algorithm"},
+    {FLB_CONFIG_MAP_STR, "ssl_certificate_verify_cb", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_certificate_verify_cb),
+     "kafka consumer property: ssl_certificate_verify_cb"},
+    {FLB_CONFIG_MAP_STR, "ssl_certificate_location", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_certificate_location),
+     "kafka consumer property: ssl_certificate_location"},
+     {FLB_CONFIG_MAP_STR, "ssl_certificate_pem", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_certificate_pem),
+     "kafka consumer property: ssl_certificate_pem"},
+     {FLB_CONFIG_MAP_STR, "ssl_key", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_key),
+     "kafka consumer property: ssl_key"},
+     {FLB_CONFIG_MAP_STR, "ssl_certificate_verify_cb", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_certificate_verify_cb),
+     "kafka consumer property: ssl_certificate_verify_cb"},
+    {FLB_CONFIG_MAP_STR, "ssl_key_location", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_key_location),
+     "kafka consumer property: ssl_key_location"},
+    {FLB_CONFIG_MAP_STR, "ssl_key_password", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_key_password),
+     "kafka consumer property: ssl_key_password"},
+    {FLB_CONFIG_MAP_STR, "ssl_enabled_protocols", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_enabled_protocols),
+     "kafka consumer property: ssl.enabled.protocols"},
+    {FLB_CONFIG_MAP_STR, "ssl_cipher_suites", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_cipher_suites),
+     "kafka consumer property: ssl_cipher_suites"},
+    {FLB_CONFIG_MAP_STR, "ssl_curves_list", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_curves_list),
+     "kafka consumer property: ssl_curves_list"},
+    {FLB_CONFIG_MAP_STR, "ssl_sigalgs_list", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, ssl_sigalgs_list),
+     "kafka consumer property: ssl_sigalgs_list"},
+    {FLB_CONFIG_MAP_STR, "sasl_kerberos_keytab", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_kerberos_keytab),
+     "kafka consumer property: sasl_kerberos_keytab"},
+    {FLB_CONFIG_MAP_STR, "sasl_kerberos_service_name", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_kerberos_service_name),
+     "kafka consumer property: sasl_kerberos_service_name"},
+    {FLB_CONFIG_MAP_STR, "sasl_kerberos_principal", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_kerberos_principal),
+     "kafka consumer property: sasl_kerberos_principal"},
+    {FLB_CONFIG_MAP_STR, "sasl_kerberos_kinit_cmd", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_kerberos_kinit_cmd),
+     "kafka consumer property: sasl_kerberos_kinit_cmd"},
+    {FLB_CONFIG_MAP_STR, "sasl_kerberos_min_time_before_relogin", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_kerberos_min_time_before_relogin),
+     "kafka consumer property: sasl_kerberos_min_time_before_relogin"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_config", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_config),
+     "kafka consumer property: sasl_oauthbearer_config"},
+    {FLB_CONFIG_MAP_STR, "enable_sasl_oauthbearer_unsecure_jwt", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, enable_sasl_oauthbearer_unsecure_jwt),
+     "kafka consumer property: enable_sasl_oauthbearer_unsecure_jwt"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_method", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_method),
+     "kafka consumer property: sasl_oauthbearer_method"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_client_id", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_client_id),
+     "kafka consumer property: sasl_oauthbearer_client_id"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_client_secret", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_client_secret),
+     "kafka consumer property: sasl_oauthbearer_client_secret"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_scope", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_scope),
+     "kafka consumer property: sasl_oauthbearer_scope"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_extensions", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_extensions),
+     "kafka consumer property: sasl_oauthbearer_extensions"},
+    {FLB_CONFIG_MAP_STR, "sasl_oauthbearer_token_endpoint_url", NULL,
+     0, FLB_TRUE, offsetof(struct flb_in_kafka_config, sasl_oauthbearer_token_endpoint_url),
+     "kafka consumer property: sasl_oauthbearer_token_endpoint_url"},
     {FLB_CONFIG_MAP_STR, "message_key", NULL,
      0, FLB_TRUE, offsetof(struct flb_in_kafka_config, message_key),
      "Message Key to consumer from. Default: message"},
