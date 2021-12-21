@@ -448,7 +448,6 @@ static int set_config_kafka_client(struct flb_in_kafka_config *ctx)
         string_copy(topic, topics[topic_cnt++]);
         topic = strtok(NULL, ",");
     }
-
     ctx->subscription = rd_kafka_topic_partition_list_new(topic_cnt);
     for (i = 0; i < topic_cnt; i++)
     {
@@ -528,7 +527,6 @@ static int in_kafka_collect(struct flb_input_instance *ins,
         flb_plg_debug(ctx->ins, "Message on %s [%" PRId32 "] at offset %" PRId64 " message_key: %s message: %s",
                       rd_kafka_topic_name(rkm->rkt), rkm->partition,
                       rkm->offset, rkm->key, rkm->payload);
-        const char *consumed_topic = rd_kafka_topic_name(rkm->rkt);
         if ((ctx->message_key) && (rkm->key != ctx->message_key))
         {
             flb_plg_error(ctx->ins, "Expected message key(%s) not found in consumed data for topic %s", ctx->message_key, rd_kafka_topic_name(rkm->rkt));
@@ -553,8 +551,8 @@ static int in_kafka_collect(struct flb_input_instance *ins,
         {
             msgpack_pack_str(&mp_pck, 10);
             msgpack_pack_str_body(&mp_pck, DEFAULT_TOPIC_NAME, 10);
-            msgpack_pack_str(&mp_pck, strlen(consumed_topic));
-            msgpack_pack_str_body(&mp_pck, consumed_topic, strlen(consumed_topic));
+            msgpack_pack_str(&mp_pck, strlen(rd_kafka_topic_name(rkm->rkt)));
+            msgpack_pack_str_body(&mp_pck, rd_kafka_topic_name(rkm->rkt), strlen(rd_kafka_topic_name(rkm->rkt)));
         }
         msgpack_pack_str(&mp_pck, 7);
         msgpack_pack_str_body(&mp_pck, DEFAULT_MESSAGE, 7);
@@ -775,7 +773,8 @@ static int in_kafka_exit(void *data, struct flb_config *config)
     }
     if (ctx->rk)
     {
-        flb_free(ctx->rk); 
+        rd_kafka_consumer_close(ctx->rk);
+        rd_kafka_destroy(ctx->rk);
     }
     if (ctx->subscription)
     {
