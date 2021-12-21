@@ -42,6 +42,7 @@ set(FLB_IN_COLLECTD            No)
 set(FLB_IN_STATSD             Yes)
 set(FLB_IN_STORAGE_BACKLOG    Yes)
 set(FLB_IN_EMITTER            Yes)
+set(FLB_IN_KAFKA              Yes)
 
 # OUTPUT plugins
 # ==============

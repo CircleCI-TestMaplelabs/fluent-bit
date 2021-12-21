@@ -114,6 +114,7 @@ option(FLB_CUSTOM_CALYPTIA    "Enable Calyptia Support"      Yes)
 
 # Built-in Plugins
 option(FLB_IN_CPU             "Enable CPU input plugin"             Yes)
+option(FLB_IN_KAFKA           "Enable Kafka input plugin"           Yes)
 option(FLB_IN_THERMAL         "Enable Thermal plugin"               Yes)
 option(FLB_IN_DISK            "Enable Disk input plugin"            Yes)
 option(FLB_IN_DOCKER          "Enable Docker input plugin"          Yes)
@@ -218,6 +219,7 @@ if(FLB_ALL)
 
   # Input plugins
   set(FLB_IN_CPU       1)
+  set(FLB_IN_KAFKA     1)
   set(FLB_IN_MEM       1)
   set(FLB_IN_KMSG      1)
   set(FLB_IN_MQTT      1)
