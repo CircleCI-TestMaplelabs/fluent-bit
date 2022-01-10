@@ -178,7 +178,6 @@ static int cb_modifier_filter_apm_url_norm(const void *data, size_t bytes,
     msgpack_packer_init(&packer, &sbuffer, msgpack_sbuffer_write);
     msgpack_unpacked_init(&unpacked);
     size_t urlpath_len = 0;
-    char *urlpath;
     while (msgpack_unpack_next(&unpacked, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS)
     {
 
@@ -207,7 +206,7 @@ static int cb_modifier_filter_apm_url_norm(const void *data, size_t bytes,
             old_record_value = &(kv + i)->val;
             if (old_record_key->type == MSGPACK_OBJECT_STR && !strncasecmp(old_record_key->via.str.ptr, ctx->lookup_key, ctx->lookup_key_len))
             {
-                urlpath = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
+                char *urlpath = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
                 urlpath_len =  old_record_value->via.str.size;
                 char *endln = "\n" ;
                 char *formattedPath = (char *)flb_malloc(old_record_value->via.str.size + 4);
@@ -215,16 +214,18 @@ static int cb_modifier_filter_apm_url_norm(const void *data, size_t bytes,
                 strncat(formattedPath, endln, strlen(endln));
                 flb_trace("[%s] Sending url path for normalization: %s", PLUGIN_NAME, urlpath);
                 //populates record map with agent information
-                if (retryConnectCounter <= GLOBALRETRIES)
+                collection_status = get_norm_url(formattedPath, atoi(ctx->port), &packer);
+                if (collection_status == unable_to_connect)
                 {
-                    collection_status = get_norm_url(formattedPath, atoi(ctx->port), &packer);
-                }
-                else
-                {
-                    flb_debug("[%s] Max retry limit exceed, skipping agent fields", PLUGIN_NAME);
-                    //collection_status = add_default;
+                    flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, retryConnectCounter, GLOBALRETRIES);
+                    retryConnectCounter++;
+                    msgpack_pack_str(&packer, NORMALIZED_PATH_LEN);
+                    msgpack_pack_str_body(&packer, NORMALIZED_PATH, NORMALIZED_PATH_LEN);
+                    msgpack_pack_str(&packer, urlpath_len);
+                    msgpack_pack_str_body(&packer, urlpath, urlpath_len);
                 }
                 flb_free(formattedPath);
+                flb_free(urlpath);
             }
             msgpack_pack_object(&packer, (kv + i)->key);
             msgpack_pack_object(&packer, (kv + i)->val);
@@ -232,23 +233,11 @@ static int cb_modifier_filter_apm_url_norm(const void *data, size_t bytes,
     }
     // flb_error(collection_status);
     msgpack_unpacked_destroy(&unpacked);
-    
     if (collection_status == url_path_not_available)
     {
-        flb_error("[%s] Lookup key %s not found", PLUGIN_NAME, ctx->lookup_key);
+        flb_error("[%s] Lookup key %s not found in the log record", PLUGIN_NAME, ctx->lookup_key);
         return FLB_FILTER_NOTOUCH;
     }
-    else if (collection_status == unable_to_connect)
-    {
-        flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, retryConnectCounter, GLOBALRETRIES);
-        retryConnectCounter++;
-        msgpack_pack_str(&packer, NORMALIZED_PATH_LEN);
-        msgpack_pack_str_body(&packer, NORMALIZED_PATH, NORMALIZED_PATH_LEN);
-        msgpack_pack_str(&packer, urlpath_len);
-        msgpack_pack_str_body(&packer, urlpath, urlpath_len);
-        flb_free(urlpath);
-    }
-    
     *out_buf = sbuffer.data;
     *out_size = sbuffer.size;
     return FLB_FILTER_MODIFIED;
