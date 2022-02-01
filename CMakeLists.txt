@@ -94,6 +94,7 @@ option(FLB_STREAM_PROCESSOR    "Enable Stream Processor"      Yes)
 option(FLB_FILTER_APM_GEOIP    "Enable geoip2 filter"         Yes)
 option(FLB_FILTER_APM_UAPARSER    "Enable uaparser filter"       Yes)
 option(FLB_FILTER_APM_URL_NORMALIZER "Enable url normalizer filter" Yes)
+option(FLB_FILTER_APM_MESSAGE_FORMATTER "Enable message formatter filter" Yes)
 option(FLB_CORO_STACK_SIZE     "Set coroutine stack size")
 option(FLB_AVRO_ENCODER        "Build with Avro encoding support" No)
 

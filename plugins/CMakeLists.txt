@@ -216,6 +216,7 @@ REGISTER_FILTER_PLUGIN("filter_throttle_size")
 REGISTER_FILTER_PLUGIN("filter_tensorflow")
 REGISTER_FILTER_PLUGIN("filter_apm_geoip")
 REGISTER_FILTER_PLUGIN("filter_apm_uaparser")
+REGISTER_FILTER_PLUGIN("filter_apm_message_formatter")
 REGISTER_FILTER_PLUGIN("filter_apm_url_normalizer")
 
 if(FLB_REGEX)
