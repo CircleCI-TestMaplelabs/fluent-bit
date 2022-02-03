@@ -112,44 +112,60 @@ static int cb_modifier_init_apm_message_formatter(struct flb_filter_instance *f_
 static int get_formatted_message(char *message, int port, msgpack_packer *packer)
 {
     int valread = 0, retry = 0;
-    char buffer[1024] = {0};
-    char *entry;
+    int size_recv,total_size = 0;
+    char new_buffer[strlen(message)+SOCKET_BUF_SIZE];
+    char buffer[SOCKET_BUF_SIZE];
+    
+    sockSend:
     if (send(socketConnectFD, message, strlen(message), 0) == -1)
     {
         flb_error("[%s] Error in sending the agent %s", PLUGIN_NAME, message);
         goto retry;
     }
-    valread = recv(socketConnectFD, buffer, 1024, 0);
-    if (valread == 0 || valread == -1)
+    while(1)
+	{
+		memset(buffer ,0 , SOCKET_BUF_SIZE);
+		if((size_recv =  recv(socketConnectFD , buffer , SOCKET_BUF_SIZE , 0) ) < 0)
+		{
+            retry:
+            while(1)
+            {
+                flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
+                if (connect_socket(port) < 0)
+                {
+                    flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
+                    if (retry++ > RETRIES) {
+                        return unable_to_connect;
+                    }
+                    continue;
+                }
+                goto sockSend;
+            }
+		}
+		else
+		{
+            if (total_size == 0)
+            {
+                strcpy(new_buffer, buffer);
+            }
+            else
+            {
+                strcat(new_buffer, buffer);
+            }
+			total_size += size_recv;
+			if (size_recv < SOCKET_BUF_SIZE){
+                break;
+            }
+		}
+	}
+    if (total_size > 0)
     {
-        retry:
-        do
-        {
-            flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
-            if (connect_socket(port) < 0)
-            {
-                flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
-                if (retry++ > RETRIES) {
-                    return unable_to_connect;
-                }
-                continue;
-            }
-            if (send(socketConnectFD, message, strlen(message), 0) == -1)
-            {
-                flb_error("[%s] Error in sending the agent %s: retry %d/%d", PLUGIN_NAME, message,  retry, RETRIES);
-                if (retry++ > RETRIES) {
-                    return unable_to_connect;
-                }
-                continue;
-            }
-            valread = recv(socketConnectFD, buffer, 1024, 0);
-        } while (valread == 0);
+        msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
+        msgpack_pack_str_body(packer, MESSAGE, MESSAGE_KEY_SIZE);
+        msgpack_pack_str(packer, total_size);
+        msgpack_pack_str_body(packer, new_buffer, total_size);
     }
 
-    msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
-    msgpack_pack_str_body(packer, MESSAGE, MESSAGE_KEY_SIZE);
-    msgpack_pack_str(packer, strlen(buffer));
-    msgpack_pack_str_body(packer, buffer, strlen(buffer));
     return data_collected;
 }
 

@@ -8,6 +8,7 @@
 #define PORTKEY "port"
 #define MESSAGE "message"
 #define MESSAGE_KEY_SIZE 7
+#define SOCKET_BUF_SIZE 1024
 enum message_formatter_status {
     message_field_not_available,
     message_field_available,

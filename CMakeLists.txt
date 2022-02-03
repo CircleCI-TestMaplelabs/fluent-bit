@@ -108,7 +108,7 @@ option(FLB_PROXY_GO           "Enable Go plugins support"   Yes)
 
 # Build-in Plugins
 option(FLB_IN_CPU             "Enable CPU input plugin"             Yes)
-option(FLB_IN_KAFKA           "Enable Kafka input plugin"             Yes)
+option(FLB_IN_KAFKA           "Enable Kafka input plugin"             No)
 option(FLB_IN_THERMAL         "Enable Thermal plugin"               Yes)
 option(FLB_IN_DISK            "Enable Disk input plugin"            Yes)
 option(FLB_IN_DOCKER          "Enable Docker input plugin"          Yes)
