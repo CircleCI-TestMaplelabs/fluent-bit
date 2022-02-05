@@ -13,6 +13,7 @@ enum message_formatter_status {
     message_field_not_available,
     message_field_available,
     data_collected,
+    data_sent,
     unable_to_connect
 };
 struct message_formatter_ctx {
