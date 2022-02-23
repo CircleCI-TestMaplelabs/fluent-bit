@@ -31,7 +31,7 @@ static int connect_socket(int port)
     }
     if ((socketConnectFD = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        flb_error("[%s] Socket creation error on port %d",PLUGIN_NAME, port);
+        flb_error("[%s] Socket creation error on port %d", PLUGIN_NAME, port);
         return -1;
     }
     if (connect(socketConnectFD, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
@@ -88,8 +88,8 @@ static int configure(struct message_formatter_ctx *ctx, struct flb_filter_instan
 }
 
 static int cb_modifier_init_apm_message_formatter(struct flb_filter_instance *f_ins,
-                            struct flb_config *config,
-                            void *data)
+                                                  struct flb_config *config,
+                                                  void *data)
 {
     struct message_formatter_ctx *ctx = NULL;
     ctx = flb_malloc(sizeof(struct message_formatter_ctx));
@@ -109,34 +109,35 @@ static int cb_modifier_init_apm_message_formatter(struct flb_filter_instance *f_
     return 0;
 }
 
-static int get_formatted_message(char *message, int port, msgpack_packer *packer)
+static int populate_formatted_message(char *message, int port, msgpack_packer *packer)
 {
     int valread = 0, retry = 0;
-    int size_recv,total_size = 0;
-    int new_buffer_len_max = strlen(message)+ (strlen(message)/4);
+    int size_recv, total_size = 0;
+    int new_buffer_len_max = strlen(message) + (strlen(message) / 4);
     char new_buffer[new_buffer_len_max];
     char buffer[SOCKET_BUF_SIZE];
     int sockSendStatus = 1;
-    sockSend:
-    if((sockSendStatus = send(socketConnectFD, message, strlen(message), 0)) == -1)
+sockSend:
+    if ((sockSendStatus = send(socketConnectFD, message, strlen(message), 0)) == -1)
     {
         flb_error("[%s] Error in sending the agent %s", PLUGIN_NAME, message);
         goto retry;
     }
     flb_debug("Socket data of size %d sent successfully", strlen(message));
-    while(1)
-	{
-		memset(buffer ,0 , SOCKET_BUF_SIZE);
-		if((size_recv =  recv(socketConnectFD , buffer , SOCKET_BUF_SIZE , 0) ) < 0)
-		{
-            retry:
-            while(1)
+    while (1)
+    {
+        memset(buffer, 0, SOCKET_BUF_SIZE);
+        if ((size_recv = recv(socketConnectFD, buffer, SOCKET_BUF_SIZE, 0)) < 0)
+        {
+        retry:
+            while (1)
             {
-                flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
+                flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES);
                 if (connect_socket(port) < 0)
                 {
-                    flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
-                    if (retry++ > RETRIES) {
+                    flb_info("[%s] Unable to reconnect to the socket", PLUGIN_NAME);
+                    if (retry++ > RETRIES)
+                    {
                         return unable_to_connect;
                     }
                     continue;
@@ -144,39 +145,39 @@ static int get_formatted_message(char *message, int port, msgpack_packer *packer
                 if (sockSendStatus == -1)
                 {
                     goto sockSend;
-                } 
-                else 
+                }
+                else
                 {
                     break;
                 }
             }
-		}
-		else
-		{
+        }
+        else
+        {
             flb_debug("Socket data receiving in parts successfully");
             if (total_size == 0)
             {
                 strcpy(new_buffer, buffer);
-    			total_size += size_recv;
+                total_size += size_recv;
             }
-            else 
+            else
             {
-                if(total_size + size_recv < new_buffer_len_max)
+                if (total_size + size_recv < new_buffer_len_max)
                 {
                     strcat(new_buffer, buffer);
-        			total_size += size_recv;
+                    total_size += size_recv;
                 }
                 else
                 {
                     flb_error("Buffer Overflow occured = %s ", buffer);
                 }
-
             }
-			if (size_recv < SOCKET_BUF_SIZE){
+            if (size_recv < SOCKET_BUF_SIZE)
+            {
                 break;
             }
-		}
-	}
+        }
+    }
     if (total_size > 0)
     {
         msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
@@ -184,7 +185,7 @@ static int get_formatted_message(char *message, int port, msgpack_packer *packer
         msgpack_pack_str(packer, total_size);
         msgpack_pack_str_body(packer, new_buffer, total_size);
         flb_debug("Socket data received successfully %d", total_size);
-    } 
+    }
     else
     {
         msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
@@ -196,14 +197,14 @@ static int get_formatted_message(char *message, int port, msgpack_packer *packer
 }
 
 static int cb_modifier_filter_apm_message_formatter(const void *data, size_t bytes,
-                              const char *tag, int tag_len,
-                              void **out_buf, size_t *out_size,
-                              struct flb_filter_instance *f_ins,
-                              void *context,
-                              struct flb_config *config)
+                                                    const char *tag, int tag_len,
+                                                    void **out_buf, size_t *out_size,
+                                                    struct flb_filter_instance *f_ins,
+                                                    void *context,
+                                                    struct flb_config *config)
 {
     struct message_formatter_ctx *ctx = context;
-    //flb_info("ppm %d",ctx->lookup_key->len);
+    // flb_info("ppm %d",ctx->lookup_key->len);
     size_t off = 0;
     int collection_status = message_field_not_available;
     int map_num = 0;
@@ -244,36 +245,33 @@ static int cb_modifier_filter_apm_message_formatter(const void *data, size_t byt
             old_record_value = &(kv + i)->val;
             if (old_record_key->type == MSGPACK_OBJECT_STR && !strncasecmp(old_record_key->via.str.ptr, ctx->lookup_key, ctx->lookup_key_len))
             {
-                bool append_default_message = false;
                 char *message = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
                 if (message == NULL)
                 {
-                    append_default_message = true;
+                    msgpack_pack_object(&packer, (kv + i)->key);
+                    msgpack_pack_object(&packer, (kv + i)->val);
                     continue;
                 }
-                mesage_len =  old_record_value->via.str.size;
-                char *endln = "\n" ;
+                mesage_len = old_record_value->via.str.size;
+                char *endln = "\n";
                 char *formattedMessage = (char *)flb_malloc(old_record_value->via.str.size + 4);
                 if (formattedMessage == NULL)
                 {
-                    append_default_message = true;
+                    msgpack_pack_object(&packer, (kv + i)->key);
+                    msgpack_pack_object(&packer, (kv + i)->val);
                     continue;
                 }
                 strcpy(formattedMessage, message);
                 strncat(formattedMessage, endln, strlen(endln));
                 flb_debug("[%s] Sending message for fomatting: %s", PLUGIN_NAME, formattedMessage);
-                //populates record map with agent information
-                collection_status = get_formatted_message(formattedMessage, atoi(ctx->port), &packer);
+                // populates record map with agent information
+                collection_status = populate_formatted_message(formattedMessage, atoi(ctx->port), &packer);
                 if (collection_status == unable_to_connect)
                 {
                     flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, retrySocketConnectCounter, GLOBALRETRIES);
-                    append_default_message = true;
-                    retrySocketConnectCounter++;
-                }
-                if (append_default_message  == true)
-                {
                     msgpack_pack_object(&packer, (kv + i)->key);
                     msgpack_pack_object(&packer, (kv + i)->val);
+                    retrySocketConnectCounter++;
                 }
                 flb_free(message);
                 flb_free(formattedMessage);
