@@ -114,7 +114,11 @@ static int populate_formatted_message(char *message, int port, msgpack_packer *p
     int valread = 0, retry = 0;
     int size_recv, total_size = 0;
     int new_buffer_len_max = strlen(message) + (strlen(message) / 4);
-    char new_buffer[new_buffer_len_max];
+    flb_sds_t new_buffer = flb_sds_create_size(new_buffer_len_max);
+    if (!new_buffer) {
+        return data_collection_failed;
+    }
+    flb_sds_t tmp;
     char buffer[SOCKET_BUF_SIZE];
     int sockSendStatus = 1;
 sockSend:
@@ -138,6 +142,7 @@ sockSend:
                     flb_info("[%s] Unable to reconnect to the socket", PLUGIN_NAME);
                     if (retry++ > RETRIES)
                     {
+                        flb_sds_destroy(new_buffer);
                         return unable_to_connect;
                     }
                     continue;
@@ -155,22 +160,19 @@ sockSend:
         else
         {
             flb_debug("Socket data receiving in parts successfully");
-            if (total_size == 0)
+            if (total_size + size_recv <= new_buffer_len_max)
             {
-                strcpy(new_buffer, buffer);
+                tmp = flb_sds_cat(new_buffer, buffer, size_recv);
+                if (!tmp) {
+                    flb_sds_destroy(new_buffer);
+                    return data_collection_failed;
+                }
+                new_buffer = tmp;
                 total_size += size_recv;
             }
             else
             {
-                if (total_size + size_recv < new_buffer_len_max)
-                {
-                    strcat(new_buffer, buffer);
-                    total_size += size_recv;
-                }
-                else
-                {
-                    flb_error("Buffer Overflow occured = %s ", buffer);
-                }
+                flb_error("Buffer Overflow occured = %s ", buffer);
             }
             if (size_recv < SOCKET_BUF_SIZE)
             {
@@ -178,6 +180,9 @@ sockSend:
             }
         }
     }
+    flb_debug("----------------------My total size %d", total_size);
+    flb_debug("----------------------My buf %d", strlen(new_buffer));
+    flb_sds_destroy(new_buffer);
     if (total_size > 0)
     {
         msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
@@ -188,12 +193,9 @@ sockSend:
     }
     else
     {
-        msgpack_pack_str(packer, MESSAGE_KEY_SIZE);
-        msgpack_pack_str_body(packer, MESSAGE, MESSAGE_KEY_SIZE);
-        msgpack_pack_str(packer, strlen(message));
-        msgpack_pack_str_body(packer, message, strlen(message));
+        return data_collection_failed;
     }
-    return data_collected;
+    return data_collection_successful;
 }
 
 static int cb_modifier_filter_apm_message_formatter(const void *data, size_t bytes,
@@ -259,6 +261,7 @@ static int cb_modifier_filter_apm_message_formatter(const void *data, size_t byt
                 {
                     msgpack_pack_object(&packer, (kv + i)->key);
                     msgpack_pack_object(&packer, (kv + i)->val);
+                    flb_free(message);
                     continue;
                 }
                 strcpy(formattedMessage, message);
@@ -272,6 +275,12 @@ static int cb_modifier_filter_apm_message_formatter(const void *data, size_t byt
                     msgpack_pack_object(&packer, (kv + i)->key);
                     msgpack_pack_object(&packer, (kv + i)->val);
                     retrySocketConnectCounter++;
+                }
+                else if (collection_status == data_collection_failed)
+                {
+                    flb_error("[%s] Data collection failed, appending the default message", PLUGIN_NAME);
+                    msgpack_pack_object(&packer, (kv + i)->key);
+                    msgpack_pack_object(&packer, (kv + i)->val);
                 }
                 flb_free(message);
                 flb_free(formattedMessage);

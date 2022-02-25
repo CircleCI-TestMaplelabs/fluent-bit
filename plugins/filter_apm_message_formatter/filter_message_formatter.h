@@ -12,9 +12,10 @@
 enum message_formatter_status {
     message_field_not_available,
     message_field_available,
-    data_collected,
+    data_collection_successful,
     data_sent,
-    unable_to_connect
+    unable_to_connect,
+    data_collection_failed,
 };
 struct message_formatter_ctx {
     char *lookup_key;
