@@ -284,6 +284,7 @@ static int cb_modifier_filter(const void *data, size_t bytes,
     if (uaparser_status == agent_not_available)
     {
         flb_error("[%s] Lookup key %s not found", PLUGIN_NAME, ctx->lookup_key);
+        msgpack_sbuffer_destroy(&sbuffer);
         return FLB_FILTER_NOTOUCH;
     }
     else if (uaparser_status == unable_to_connect)

@@ -236,6 +236,7 @@ static int cb_modifier_filter_apm_url_norm(const void *data, size_t bytes,
     if (collection_status == url_path_not_available)
     {
         flb_error("[%s] Lookup key %s not found in the log record", PLUGIN_NAME, ctx->lookup_key);
+        msgpack_sbuffer_destroy(&sbuffer);
         return FLB_FILTER_NOTOUCH;
     }
     *out_buf = sbuffer.data;
