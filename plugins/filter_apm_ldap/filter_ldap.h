@@ -1,6 +1,6 @@
 #define AVAILABLE 1
 #define NOT_AVAILABLE 0
-#define NEW_ENTRIES 14
+#define NEW_ENTRIES 15
 #define RETRIES 2
 #define GLOBALRETRIES 100
 #define DELAYINSEC 2
