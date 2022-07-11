@@ -147,6 +147,7 @@ sockSend:
                     }
                     continue;
                 }
+                retry = 0;
                 if (sockSendStatus == -1)
                 {
                     goto sockSend;
