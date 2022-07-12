@@ -220,7 +220,7 @@ REGISTER_FILTER_PLUGIN("filter_apm_message_formatter")
 REGISTER_FILTER_PLUGIN("filter_apm_url_normalizer")
 REGISTER_FILTER_PLUGIN("filter_apm_ldap")
 REGISTER_FILTER_PLUGIN("filter_apm_goals_airflow")
-
+REGISTER_FILTER_PLUGIN("filter_apm_kubernetes_labels")
 if(FLB_REGEX)
   REGISTER_FILTER_PLUGIN("filter_kubernetes")
   REGISTER_FILTER_PLUGIN("filter_modify")

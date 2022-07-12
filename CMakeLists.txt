@@ -99,7 +99,7 @@ option(FLB_CORO_STACK_SIZE     "Set coroutine stack size")
 option(FLB_AVRO_ENCODER        "Build with Avro encoding support" No)
 option(FLB_FILTER_APM_LDAP  "Enable ldap filter" Yes)
 option(FLB_FILTER_APM_GOALS_AIRFLOW  "Enable airflow filter customized for goals" Yes)
-
+option(FLB_FILTER_APM_KUBERNETES_LABELS  "Enable custom collection of k8s labels" Yes)
 # Metrics: Experimental Feature, disabled by default on 0.12 series
 # but enabled in the upcoming 0.13 release. Note that development
 # mode enable this feature.
