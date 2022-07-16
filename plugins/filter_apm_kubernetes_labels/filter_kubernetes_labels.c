@@ -11,6 +11,10 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include "filter_kubernetes_labels.h"
+#include <fluent-bit/flb_pack.h>
+#include <fluent-bit/flb_jsmn.h>
+#include <sys/stat.h>
+
 #define PLUGIN_NAME "filter:apm_kubernetes_labels"
 
 
@@ -18,11 +22,7 @@
 static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instance *f_ins)
 {
     char *data_in;
-    char *msgpack_out_buf;
-    size_t msgpack_out_buf_size;
-    int type;
     int ret;
-    size_t len_in;
     char *file_path = NULL;
     struct mk_list *head = NULL;
     struct flb_kv *kv = NULL;
@@ -43,21 +43,54 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     }
     //read file to buffer
     data_in = mk_file_to_buffer(file_path);
-    len_in = strlen(data_in);
     if (data_in == NULL) {
         flb_error("Error reading json file %s", file_path);
         return -1;
     }
-    //json to msgpack
-    ret = flb_pack_json(data_in, len_in, &msgpack_out_buf, &msgpack_out_buf_size, &type);
-    if (ret != 0) {
-        flb_error("failed packaging JSON to msgpack");
+
+
+    int tok_size = MAX_JSMN_TOKEN_SIZE;
+
+    struct stat st;
+    jsmn_parser parser;
+    jsmntok_t *t;
+    jsmntok_t *tokens;
+
+
+    ret = stat(file_path, &st);
+    if (ret == -1) {
+        flb_errno();
+        flb_info("cannot open credentials file");
+        return -1;
+    }
+
+    jsmn_init(&parser);
+    tokens = flb_calloc(1, sizeof(jsmntok_t) * tok_size);
+    if (!tokens) {
+        flb_errno();
         flb_free(data_in);
         return -1;
     }
-    ctx -> pod_label_details_as_msgpack = flb_strndup(msgpack_out_buf, strlen(msgpack_out_buf));
-    ctx -> len_of_pod_label_details_as_msgpack = msgpack_out_buf_size;
-    
+
+    ret = jsmn_parse(&parser, data_in, st.st_size, tokens, tok_size);
+    if (ret <= 0) {
+        flb_error("invalid JSON file:");
+        flb_free(data_in);
+        flb_free(tokens);
+        return -1;
+    }
+
+    t = &tokens[0];
+    if (t->type != JSMN_OBJECT) {
+        flb_error("invalid JSON map in file");
+        flb_free(data_in);
+        flb_free(tokens);
+        return -1;
+    }
+    ctx-> jsmn_ret = ret;
+    ctx-> jsmn_tokens = tokens;
+    ctx-> json_buf = data_in;
+
     char* proj_name_label = getenv(SFAPM_PROJECTNAME_LABEL);
     if(proj_name_label)
         ctx -> projname_labe1 = proj_name_label;
@@ -70,10 +103,6 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
         ctx -> appname_labe1 = app_name_label;
     else
         ctx -> appname_labe1 = DEFAULT_APPNAME_LABEL;
-    flb_free(data_in);
-    flb_free(msgpack_out_buf);
-    flb_free(file_path);
-
     return 0;
 }
 
@@ -118,11 +147,7 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
     msgpack_object_kv *kv;
     msgpack_sbuffer_init(&sbuffer);
     msgpack_packer_init(&packer, &sbuffer, msgpack_sbuffer_write);
-    msgpack_unpacked_init(&unpacked);
-
-
-    int ok = MSGPACK_UNPACK_SUCCESS;   
-    int num_pods, num_labels, iter_var_1, iter_var_2;
+    msgpack_unpacked_init(&unpacked); 
 
     while (msgpack_unpack_next(&unpacked, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS)
     {
@@ -142,11 +167,6 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             continue;
         }
 
-        size_t label_mapper_off = 0;
-        msgpack_unpacked label_mapper_result;
-        msgpack_unpacked_init(&label_mapper_result);
-        msgpack_object label_mapper_root;
-        msgpack_object *pod_name_key, *pod_details, *label_name_key, *label_val;
         int snappyflow_labels_configured_directly_tracker = 0;
 
         char *snappyflow_labels_configured_key_store[6];
@@ -172,8 +192,8 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             old_record_value = &(kv + i)->val;
             if (old_record_key->type == MSGPACK_OBJECT_STR)
             {
-                if ((!strncasecmp(old_record_key->via.str.ptr, DEFAULT_PROJECTNAME_LABEL, DEFAULT_PROJECTNAME_LABEL_LEN)) || 
-                    (!strncasecmp(old_record_key->via.str.ptr, DEFAULT_APPNAME_LABEL, DEFAULT_APPNAME_LABEL_LEN)) ||
+                if ((!strncasecmp(old_record_key->via.str.ptr, ctx -> projname_labe1, strlen(ctx -> projname_labe1))) || 
+                    (!strncasecmp(old_record_key->via.str.ptr, ctx -> appname_labe1, strlen(ctx -> appname_labe1))) ||
                     (!strncasecmp(old_record_key->via.str.ptr, COMPONENT_NAME_LABEL, COMPONENT_NAME_LABEL_LEN)) ||
                     (!strncasecmp(old_record_key->via.str.ptr, UA_PARSER_LABEL, UA_PARSER_LABEL_LEN)) ||
                     (!strncasecmp(old_record_key->via.str.ptr, GEO_INFO_LABEL, GEO_INFO_LABEL_LEN)) ||
@@ -202,66 +222,75 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         int key_store_iter;
         int new_fields_to_add = 0;
         int new_fields_starting_index = snappyflow_labels_configured_directly_tracker;
-        
-        
-        while (msgpack_unpack_next(&label_mapper_result, ctx->pod_label_details_as_msgpack, ctx->len_of_pod_label_details_as_msgpack, &label_mapper_off) == ok) {
-
-            label_mapper_root = label_mapper_result.data;
-            if (label_mapper_root.type != MSGPACK_OBJECT_MAP) {
-                flb_error("Input json data is not a map kind: Identified type: %d",label_mapper_root.type );
+        char *key;
+        char *val;
+        jsmntok_t *t;
+        int key_len;
+        int val_len;
+        bool pod_name_matched = false;
+        for (i = 1; i < ctx->jsmn_ret; i++) {
+            t = &ctx->jsmn_tokens[i];
+            if (t->type != JSMN_STRING) {
                 continue;
             }
-            
-            num_pods = label_mapper_root.via.map.size;
-            for (iter_var_1 = 0; iter_var_1 < num_pods; iter_var_1++) {
-                pod_name_key = &label_mapper_root.via.map.ptr[iter_var_1].key;
-                pod_details = &label_mapper_root.via.map.ptr[iter_var_1].val;
-                if ((pod_name_key->type == MSGPACK_OBJECT_STR ) && (!strncasecmp(pod_name_key->via.str.ptr, pod_name_populated, strlen(pod_name_populated))))
-                {
-                    char *pod_name = pod_name_key->via.str.ptr;
-                    if (pod_details->type != MSGPACK_OBJECT_MAP) {
-                        flb_error("pod %s details are not represented in map: Identified type: %d; exiting",pod_name, pod_details->type);
-                        continue;
-                    } 
-                    num_labels = pod_details->via.map.size;
-                    for (iter_var_2 = 0; iter_var_2 < num_labels; iter_var_2++) 
-                    {
-                        label_name_key = &pod_details->via.map.ptr[iter_var_2].key;
-                        label_val = &pod_details->via.map.ptr[iter_var_2].val;
-                        if (label_name_key->type == MSGPACK_OBJECT_STR ) {
-                            bool new_label_identified = true;
-                            for (key_store_iter=0; key_store_iter < strlen(snappyflow_labels_configured_key_store); key_store_iter++)
-                            {
 
-                                if ((snappyflow_labels_configured_key_store[key_store_iter]!=NULL) && (!strncasecmp(label_name_key->via.str.ptr, snappyflow_labels_configured_key_store[key_store_iter], label_name_key->via.str.size)))
-                                {
-                                    char* tmp = flb_realloc(snappyflow_labels_configured_val_store[key_store_iter], label_val->via.str.size);
-                                    if (!tmp) {
-                                        flb_error("Error resizing existing buffer");
-                                        continue;
-                                    }
-                                    snappyflow_labels_configured_val_store[key_store_iter] = tmp;
-                                    memcpy(snappyflow_labels_configured_val_store[key_store_iter], label_val->via.str.ptr, label_val->via.str.size);
-                                    snappyflow_labels_configured_val_store[key_store_iter][label_val->via.str.size] = '\0';
-                                    new_label_identified = false;
-                                    break;
-                                }
-                            }
-                            if (new_label_identified)
-                            {
-                                snappyflow_labels_configured_key_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(label_name_key->via.str.ptr, label_name_key->via.str.size);
-                                snappyflow_labels_configured_val_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(label_val->via.str.ptr, label_val->via.str.size);
-                                snappyflow_labels_configured_directly_tracker = snappyflow_labels_configured_directly_tracker + 1;
-                                new_fields_to_add = new_fields_to_add + 1;
-                            }
+            if (t->start == -1 || t->end == -1 || (t->start == 0 && t->end == 0)){
+                break;
+            }
+            key = ctx-> json_buf + t->start;
+            key_len = (t->end - t->start);
+
+            i++;
+            t = &ctx->jsmn_tokens[i];
+            if (t->type == JSMN_OBJECT) {
+                if (pod_name_matched) 
+                {
+
+                    break;
+                }
+                if (!strncasecmp(key, pod_name_populated, strlen(pod_name_populated)))
+                {
+                    pod_name_matched = true;
+                }
+                continue;
+            }
+            else if (!pod_name_matched)
+            {
+                continue;
+            }
+            val = ctx-> json_buf + t->start;
+            val_len = (t->end - t->start);
+            bool new_label_identified = true;
+            for (key_store_iter=0; key_store_iter < strlen(snappyflow_labels_configured_key_store); key_store_iter++)
+            {
+
+                if ((snappyflow_labels_configured_key_store[key_store_iter]!=NULL) && (!strncasecmp(key, snappyflow_labels_configured_key_store[key_store_iter], key_len)))
+                {
+                    if (strlen(snappyflow_labels_configured_val_store[key_store_iter])!= val_len)
+                    {
+                        char* tmp = flb_realloc(snappyflow_labels_configured_val_store[key_store_iter], val_len);
+                        if (!tmp) {
+                            flb_error("Error resizing existing buffer");
+                            continue;
                         }
+                        snappyflow_labels_configured_val_store[key_store_iter] = tmp;
                     }
+                    
+                    memcpy(snappyflow_labels_configured_val_store[key_store_iter],val, val_len);
+                    snappyflow_labels_configured_val_store[key_store_iter][val_len] = '\0';
+                    new_label_identified = false;
                     break;
                 }
             }
+            if (new_label_identified)
+            {
+                snappyflow_labels_configured_key_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(key, key_len);
+                snappyflow_labels_configured_val_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(val, val_len);
+                snappyflow_labels_configured_directly_tracker = snappyflow_labels_configured_directly_tracker + 1;
+                new_fields_to_add = new_fields_to_add + 1;
+            }
+
         }
-        msgpack_unpacked_destroy(&label_mapper_result);
-        
         msgpack_pack_map(&packer, map_num + new_fields_to_add);
         for (i = 0 ; i<strlen(snappyflow_labels_configured_key_store); i++)
         {
@@ -309,7 +338,8 @@ static int cb_modifier_exit_apm_kubernetes_labels(void *data, struct flb_config 
     struct kubernetes_labels_ctx *ctx = data;
     if (ctx != NULL)
     {
-        flb_free(ctx->pod_label_details_as_msgpack);
+        flb_free(ctx->jsmn_tokens);
+        flb_free(ctx->json_buf);
         flb_free(ctx);
         ctx = NULL;
     }

@@ -21,16 +21,19 @@
 #define EXCLUDE_CONTAINER_LABEL_LEN 33
 #define POD_LABEL_MAPPING_FILE_LEN 21
 
+#define MAX_JSMN_TOKEN_SIZE 213200
 // enum kubernetes_labels_status {
 //     unable_to_connect,
 //     data_collection_in_progress,
 //     data_collection_successful,
 //     data_collection_failed,
 // };
+#include <fluent-bit/flb_jsmn.h>
 
 struct kubernetes_labels_ctx {
-    char* pod_label_details_as_msgpack;
-    size_t len_of_pod_label_details_as_msgpack;
+    jsmntok_t *jsmn_tokens;
+    int jsmn_ret;
+    char* json_buf;
     char* appname_labe1;
     char* projname_labe1;
     struct flb_filter_instance *ins;
