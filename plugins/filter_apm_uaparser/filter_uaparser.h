@@ -2,7 +2,7 @@
 #define NOT_AVAILABLE 0
 #define NEW_ENTRIES 9
 #define RETRIES 2
-#define GLOBALRETRIES 100
+// #define GLOBALRETRIES 100
 #define DELAYINSEC 2
 #define LOOKUPKEY "agent_key"
 #define DEFAULT "Unknown"
@@ -32,8 +32,7 @@ enum ua_parser_status {
     agent_not_available,
     agent_available,
     data_collected,
-    unable_to_connect,
-    add_default
+    unable_to_connect
 };
 struct uaparser_ctx {
     char *lookup_key;

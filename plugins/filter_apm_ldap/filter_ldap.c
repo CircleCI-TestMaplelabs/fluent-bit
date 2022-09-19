@@ -114,37 +114,39 @@ static int get_ldap(char *path, int port, msgpack_packer *packer)
     int valread = 0, retry = 0;
     char buffer[1024] = {0};
     char *entry;
-    if (send(ldapSocketFD, path, strlen(path), 0) == -1)
-    {
-        flb_error("[%s] Error in sending the agent %s", PLUGIN_NAME, path);
-        goto retry;
-    }
-    valread = recv(ldapSocketFD, buffer, 1024, 0);
-    if (valread == 0 || valread == -1)
-    {
-        retry:
-        do
+    int sockSendStatus = 1;
+    sockSend:
+        if ((sockSendStatus = send(ldapSocketFD, path, strlen(path), 0)) == -1)
         {
-            flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
-            if (connect_socket(port) < 0)
-            {
-                flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
-                if (retry++ > RETRIES) {
-                    return unable_to_connect;
+            flb_error("[%s] Error in sending the path %s", PLUGIN_NAME, path);
+            goto retry;
+        }
+    sockReceive:
+        valread = recv(ldapSocketFD, buffer, 1024, 0);
+        if (valread < 0 )
+        {
+            retry:
+                while(1)
+                {
+                    flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
+                    if (connect_socket(port) < 0)
+                    {
+                        flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
+                        if (retry++ > RETRIES) {
+                            return unable_to_connect;
+                        }
+                        continue;
+                    }
+                    if (sockSendStatus == -1)
+                    {
+                        goto sockSend;
+                    }
+                    else
+                    {
+                        goto sockReceive;
+                    }
                 }
-                continue;
-            }
-            if (send(ldapSocketFD, path, strlen(path), 0) == -1)
-            {
-                flb_error("[%s] Error in sending the agent %s: retry %d/%d", PLUGIN_NAME, path,  retry, RETRIES);
-                if (retry++ > RETRIES) {
-                    return unable_to_connect;
-                }
-                continue;
-            }
-            valread = recv(ldapSocketFD, buffer, 1024, 0);
-        } while (valread == 0);
-    }
+        }
     entry = strtok(buffer, "}");
 
     while (entry != NULL)
