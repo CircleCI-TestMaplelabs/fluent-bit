@@ -1,7 +1,7 @@
 #define AVAILABLE 1
 #define NOT_AVAILABLE 0
 #define NEW_ENTRIES 1
-#define RETRIES 2
+#define RETRIES 4
 #define GLOBALRETRIES 100
 #define DELAYINSEC 2
 #define LOOKUPKEY "url_path_key"
@@ -10,11 +10,13 @@
 #define NORMALIZED_PATH "normalized_path"
 #define NORMALIZED_PATH_LEN 15
 #define PORTKEY "port"
-
+#define SOCKET_BUF_SIZE 1024
+#define END_OF_MESSAGE "~eom~"
 enum url_normalize_status {
     url_path_not_available,
     url_path_available,
     data_collected,
+    data_collection_failed,
     unable_to_connect
 };
 struct urlnormalizer_ctx {
