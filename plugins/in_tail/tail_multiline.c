@@ -146,6 +146,8 @@ static int pack_line(char *data, size_t data_size, struct flb_tail_file *file,
 int flb_tail_mult_process_first(time_t now,
                                 char *buf, size_t size,
                                 struct flb_time *out_time,
+                                char *line,
+                                size_t line_len,
                                 struct flb_tail_file *file,
                                 struct flb_tail_config *ctx)
 {
@@ -192,18 +194,29 @@ int flb_tail_mult_process_first(time_t now,
 
     /* Re-initiate buffers */
     msgpack_sbuffer_init(&file->mult_sbuf);
+    msgpack_sbuffer_init(&file->mult_sbuf_for_source_log);
     msgpack_packer_init(&file->mult_pck, &file->mult_sbuf, msgpack_sbuffer_write);
+    msgpack_packer_init(&file->mult_pck_for_source_log, &file->mult_sbuf_for_source_log, msgpack_sbuffer_write);
+
 
     /*
      * flb_parser_do() always return a msgpack buffer, so we tweak our
      * local msgpack reference to avoid an extra allocation. The only
      * concern is that we don't know what's the real size of the memory
      * allocated, so we assume it's just 'out_size'.
-     */
+    */
     file->mult_flush_timeout = now + (ctx->multiline_flush - 1);
     file->mult_sbuf.data = buf;
     file->mult_sbuf.size = size;
     file->mult_sbuf.alloc = size;
+
+    msgpack_pack_map(&file->mult_pck_for_source_log, 1);
+
+    msgpack_pack_str(&file->mult_pck_for_source_log, strlen(SOURCE_LOG_KEY));
+    msgpack_pack_str_body(&file->mult_pck_for_source_log, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
+    msgpack_pack_str(&file->mult_pck_for_source_log, line_len);
+    msgpack_pack_str_body(&file->mult_pck_for_source_log, line, line_len);
+    file->source_multi_log_size = file->source_multi_log_size + line_len;
 
     /* Set multiline status */
     file->mult_firstline = FLB_TRUE;
@@ -215,6 +228,7 @@ int flb_tail_mult_process_first(time_t now,
     ret = msgpack_unpack_next(&result, buf, size, &off);
     if (ret != MSGPACK_UNPACK_SUCCESS) {
         msgpack_sbuffer_destroy(&file->mult_sbuf);
+        msgpack_sbuffer_destroy(&file->mult_sbuf_for_source_log);
         msgpack_unpacked_destroy(&result);
         return FLB_TAIL_MULT_NA;
     }
@@ -306,7 +320,7 @@ int flb_tail_mult_process_content(time_t now,
         else
             file->mult_firstline_append = FLB_FALSE;
 
-        flb_tail_mult_process_first(now, out_buf, out_size, &out_time,
+        flb_tail_mult_process_first(now, out_buf, out_size, &out_time, buf, len,
                                     file, ctx);
         return FLB_TAIL_MULT_MORE;
     }
@@ -337,6 +351,20 @@ int flb_tail_mult_process_content(time_t now,
         /* The line was processed, break the loop and buffer the data */
         break;
     }
+
+    /*Initiate buffers if no prev lines are avail*/
+    if (file->source_multi_log_size == 0)
+    {
+        /* Re-initiate buffers */
+        msgpack_sbuffer_init(&file->mult_sbuf_for_source_log);
+        msgpack_packer_init(&file->mult_pck_for_source_log, &file->mult_sbuf_for_source_log, msgpack_sbuffer_write);
+    }
+    msgpack_pack_map(&file->mult_pck_for_source_log, 1);
+    msgpack_pack_str(&file->mult_pck_for_source_log, strlen(SOURCE_LOG_KEY));
+    msgpack_pack_str_body(&file->mult_pck_for_source_log, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
+    msgpack_pack_str(&file->mult_pck_for_source_log, len);
+    msgpack_pack_str_body(&file->mult_pck_for_source_log,buf, len);
+    file->source_multi_log_size = file->source_multi_log_size + len;
 
     if (!mult_parser) {
         /*
@@ -400,6 +428,11 @@ int flb_tail_mult_flush(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
     /* New Map size */
     map_size = file->mult_keys;
     if (file->config->path_key != NULL) {
+        map_size++;
+    }
+    if (file->source_multi_log_size > 0)
+    {
+        /* Consider source_log entry in map */
         map_size++;
     }
     msgpack_pack_map(mp_pck, map_size);
@@ -481,7 +514,30 @@ int flb_tail_mult_flush(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
 
     msgpack_unpacked_destroy(&result);
     msgpack_unpacked_destroy(&cont);
-
+    if  (file->source_multi_log_size > 0)
+    {
+        msgpack_unpacked unpacked;
+        msgpack_unpacked_init(&unpacked);
+        size_t offset = 0;
+        msgpack_pack_str(mp_pck, strlen(SOURCE_LOG_KEY));
+        msgpack_pack_str_body(mp_pck, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
+        msgpack_pack_str(mp_pck, file->source_multi_log_size);
+        while (msgpack_unpack_next(&unpacked, file->mult_sbuf_for_source_log.data, file->mult_sbuf_for_source_log.size, &offset) == MSGPACK_UNPACK_SUCCESS)
+        {
+            if (unpacked.data.type!= MSGPACK_OBJECT_MAP )
+            {
+                continue;
+            }
+            msgpack_object root = unpacked.data;
+            for (int i = 0; i < root.via.map.size; i++) {
+                k = root.via.map.ptr[i].key;
+                v = root.via.map.ptr[i].val;
+                msgpack_pack_str_body(mp_pck, v.via.str.ptr,
+                                            v.via.str.size);
+            }
+        }
+        msgpack_unpacked_destroy(&unpacked);
+    }
     /* Reset status */
     file->mult_firstline = FLB_FALSE;
     file->mult_skipping = FLB_FALSE;
@@ -489,6 +545,9 @@ int flb_tail_mult_flush(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
     file->mult_flush_timeout = 0;
     msgpack_sbuffer_destroy(&file->mult_sbuf);
     file->mult_sbuf.data = NULL;
+    msgpack_sbuffer_destroy(&file->mult_sbuf_for_source_log);
+    file->mult_sbuf_for_source_log.data = NULL;
+    file->source_multi_log_size = 0;
     flb_time_zero(&file->mult_time);
 
     return 0;

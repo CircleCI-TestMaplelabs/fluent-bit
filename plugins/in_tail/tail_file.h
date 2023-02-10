@@ -40,6 +40,8 @@
 #define FLB_HASH_TABLE_SIZE 50
 #endif
 
+#define SOURCE_LOG_KEY "source_log"
+
 /* return the file modification time in seconds since epoch */
 static inline int64_t flb_tail_stat_mtime(struct stat *st)
 {

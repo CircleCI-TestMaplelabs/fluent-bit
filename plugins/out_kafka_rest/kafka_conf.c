@@ -22,6 +22,7 @@
 #include <fluent-bit/flb_output_plugin.h>
 #include <fluent-bit/flb_mem.h>
 #include <fluent-bit/flb_utils.h>
+#include <time.h>
 
 #include "kafka.h"
 #include "kafka_conf.h"
@@ -116,6 +117,61 @@ struct flb_kafka_rest *flb_kr_conf_create(struct flb_output_instance *ins,
     else {
         ctx->time_key_format = flb_strdup(FLB_KAFKA_TIME_KEYF);
         ctx->time_key_format_len = sizeof(FLB_KAFKA_TIME_KEYF) - 1;
+    }
+
+    tmp = flb_output_get_property("failed_chunk_logging_interval", ins);
+    if ((tmp) && (strlen(tmp) != 0)) {
+        flb_sds_t formatted_logging_duration = flb_sds_create_size(strlen(tmp)-1);
+        if (formatted_logging_duration)
+        {
+            flb_sds_t formatted_logging_duration_tmp = NULL;
+            formatted_logging_duration_tmp = flb_sds_copy(formatted_logging_duration, tmp, strlen(tmp)-1);
+            if (formatted_logging_duration_tmp)
+            {
+                if (formatted_logging_duration_tmp != formatted_logging_duration)
+                {
+                    formatted_logging_duration = formatted_logging_duration_tmp;
+                }
+                if (tmp[strlen(tmp)-1] == CUSTOM_FAILED_CHUNK_LOGGING_UNIT_DAY)
+                {
+                        ctx->failed_chunk_logging_interval_in_sec = atoi(formatted_logging_duration) * CONVERSION_FACTOR_DAY_TO_SEC;
+                }
+                else if (tmp[strlen(tmp)-1] == CUSTOM_FAILED_CHUNK_LOGGING_UNIT_HOUR)
+                {
+                        ctx->failed_chunk_logging_interval_in_sec = atoi(formatted_logging_duration) * CONVERSION_FACTOR_HOUR_TO_SEC;
+                }
+                else if (tmp[strlen(tmp)-1] == CUSTOM_FAILED_CHUNK_LOGGING_UNIT_MINUTE)
+                {
+                        ctx->failed_chunk_logging_interval_in_sec = atoi(formatted_logging_duration) * CONVERSION_FACTOR_MINUTE_TO_SEC;
+                }
+                else if (tmp[strlen(tmp)-1] == CUSTOM_FAILED_CHUNK_LOGGING_UNIT_SEC)
+                {
+                        ctx->failed_chunk_logging_interval_in_sec = atoi(formatted_logging_duration) ;
+                }
+            }
+            flb_sds_destroy(formatted_logging_duration);
+        }
+    }
+
+    if (ctx->failed_chunk_logging_interval_in_sec == 0)
+    {
+       ctx->failed_chunk_logging_interval_in_sec = CONVERSION_FACTOR_DAY_TO_SEC;
+    }
+
+    /* Setting current time as the next scheduled time*/
+    time(&ctx->next_scheduled_chunk_logging_time);
+
+
+    flb_plg_info(ctx->ins, "failed_chunk_logging_interval_in_sec is set to %d", ctx->failed_chunk_logging_interval_in_sec);
+
+    tmp = flb_output_get_property("failed_max_chunks_to_be_collected_in_a_period", ins);
+    if (tmp) {
+        ctx->failed_max_chunks_to_be_collected_in_a_period = atoi(tmp);
+    }
+
+    if (ctx->failed_max_chunks_to_be_collected_in_a_period == 0)
+    {
+       ctx->failed_max_chunks_to_be_collected_in_a_period = 1;
     }
 
     /* Include Tag key */
@@ -215,7 +271,6 @@ int flb_kr_conf_destroy(struct flb_kafka_rest *ctx)
 
     flb_free(ctx->time_key);
     flb_free(ctx->time_key_format);
-
     if (ctx->path) {
         flb_free(ctx->path);
     }

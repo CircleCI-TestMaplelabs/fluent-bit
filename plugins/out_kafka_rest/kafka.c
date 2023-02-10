@@ -26,7 +26,7 @@
 #include <fluent-bit/flb_http_client.h>
 #include <fluent-bit/flb_config_map.h>
 #include <msgpack.h>
-
+#include <time.h>
 #include "kafka.h"
 #include "kafka_conf.h"
 
@@ -71,6 +71,17 @@ static struct flb_config_map config_map[] = {
      FLB_CONFIG_MAP_STR, "time_key_format", FLB_KAFKA_TIME_KEYF,
      0, FLB_TRUE, offsetof(struct flb_kafka_rest, time_key_format),
      "Specify the format of the timestamp. "
+    },
+
+    {
+     FLB_CONFIG_MAP_STR, "failed_chunk_logging_interval", "1d",
+     0, FLB_FALSE, offsetof(struct flb_kafka_rest, failed_chunk_logging_interval_custom),
+     "Failed Doc Logging Duration"
+    },
+    {
+    FLB_CONFIG_MAP_INT, "failed_max_chunks_to_be_collected_in_a_period", "1",
+    0, FLB_FALSE, offsetof(struct flb_kafka_rest, failed_max_chunks_to_be_collected_in_a_period),
+    "Failed max docs to be collected"
     },
 
     {
@@ -175,12 +186,27 @@ static flb_sds_t kafka_rest_format(const void *data, size_t bytes,
             msgpack_pack_str_body(&mp_pck, ctx->message_key, ctx->message_key_len);
         }
 
-        /* Value Map Size */
         map_size = map.via.map.size;
         map_size++;
         if (ctx->include_tag_key == FLB_TRUE) {
             map_size++;
         }
+
+        bool is_source_log_key_found = false;
+        for (i = 0; i < map.via.map.size; i++) {
+            key = map.via.map.ptr[i].key;
+            if ((key.type == MSGPACK_OBJECT_STR) && (!strncasecmp(key.via.str.ptr, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY))))
+            {
+                    is_source_log_key_found = true;
+                    break;
+            }
+        }
+
+        if (is_source_log_key_found) {
+            map_size--;
+        }
+
+        /* Value Map Size */
 
         msgpack_pack_str(&mp_pck, 5);
         msgpack_pack_str_body(&mp_pck, "value", 5);
@@ -212,7 +238,10 @@ static flb_sds_t kafka_rest_format(const void *data, size_t bytes,
         for (i = 0; i < map.via.map.size; i++) {
             key = map.via.map.ptr[i].key;
             val = map.via.map.ptr[i].val;
-
+            // Skip sending the source log to kafka rest
+            if ((key.type == MSGPACK_OBJECT_STR) && (!strncasecmp(key.via.str.ptr, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY)))) {
+                continue;
+            }
             msgpack_pack_object(&mp_pck, key);
             msgpack_pack_object(&mp_pck, val);
         }
@@ -268,12 +297,20 @@ static void cb_kafka_flush(const void *data, size_t bytes,
     (void) i_ins;
     (void) tag;
     (void) tag_len;
-
+    long current_time;
     /* Get upstream connection */
     u_conn = flb_upstream_conn_get(ctx->u);
     if (!u_conn) {
         FLB_OUTPUT_RETURN(FLB_RETRY);
     }
+
+
+    flb_sds_t source_log_json;
+    source_log_json = flb_pack_msgpack_to_json_format(data, bytes,
+                                            FLB_PACK_JSON_FORMAT_LINES,
+                                            FLB_PACK_JSON_DATE_ISO8601,
+                                            NULL);
+
 
     /* Convert format */
     js = kafka_rest_format(data, bytes, tag, tag_len, &js_size, ctx);
@@ -317,6 +354,31 @@ static void cb_kafka_flush(const void *data, size_t bytes,
                 flb_plg_debug(ctx->ins, "Kafka REST response\n%s",
                               c->resp.payload);
             }
+            if (c->resp.status >= 500)
+            {
+                time(&current_time);
+
+                if (current_time >= ctx->next_scheduled_chunk_logging_time)
+                {
+                    flb_plg_error(ctx->ins, "Rest Server rejected chunk with source log: %s", source_log_json);
+                    flb_plg_error(ctx->ins, "Rest Server rejected chunk's kafka formatted request payload: %s", js);
+                    if ((double) (current_time - ctx->next_scheduled_chunk_logging_time)/ctx->failed_chunk_logging_interval_in_sec > 1)
+                    {
+                        ctx-> num_chunks_logged_per_observation_period = 1;
+                    }
+                    else
+                    {
+                        ctx-> num_chunks_logged_per_observation_period = ctx-> num_chunks_logged_per_observation_period + 1;
+                    }
+                    if (ctx-> num_chunks_logged_per_observation_period >= ctx -> failed_max_chunks_to_be_collected_in_a_period )
+                    {
+                        ctx->next_scheduled_chunk_logging_time = current_time + ctx->failed_chunk_logging_interval_in_sec;
+                        ctx-> num_chunks_logged_per_observation_period  = 0;
+                        flb_plg_debug(ctx->ins, "Next Scheduled Time for server rejected documents: %d",  ctx->next_scheduled_chunk_logging_time);
+                    }
+                }
+            }
+
             goto retry;
         }
 

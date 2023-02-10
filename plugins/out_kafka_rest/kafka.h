@@ -25,7 +25,28 @@
 #define FLB_KAFKA_TIME_KEYF  "%Y-%m-%dT%H:%M:%S"
 #define FLB_KAFKA_TAG_KEY    "_flb-key"
 
+#define SOURCE_LOG_KEY "source_log"
+#define CONVERSION_FACTOR_DAY_TO_SEC 86400
+#define CONVERSION_FACTOR_HOUR_TO_SEC 3600
+#define CONVERSION_FACTOR_MINUTE_TO_SEC 60
+#define CUSTOM_FAILED_CHUNK_LOGGING_UNIT_DAY 'd'
+#define CUSTOM_FAILED_CHUNK_LOGGING_UNIT_HOUR 'h'
+#define CUSTOM_FAILED_CHUNK_LOGGING_UNIT_MINUTE 'm'
+#define CUSTOM_FAILED_CHUNK_LOGGING_UNIT_SEC 's'
+
 struct flb_kafka_rest {
+
+    long next_scheduled_chunk_logging_time;
+    long num_chunks_logged_per_observation_period;
+
+    long failed_max_chunks_to_be_collected_in_a_period;
+
+    /* Received logging duration configuration; No actual config data will be stored; Used only for local metadata key relationship with user-config since its enforced by fluent */
+    char *failed_chunk_logging_interval_custom;
+
+    /* Representing logging duration in sec. */
+    long failed_chunk_logging_interval_in_sec;
+
     /* Kafka specifics */
     long partition;
     char *topic;

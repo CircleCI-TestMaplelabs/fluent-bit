@@ -158,11 +158,25 @@ int flb_tail_pack_line_map(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
     return 0;
 }
 
+/* Exposing it as a function module, for other versions of tail implementations */
+int flb_tail_file_pack_source_log(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
+                            struct flb_time *time, char **data, size_t *data_size,
+                            char *line_key, int line_key_len,
+                            char *line_content, int line_content_len)
+{
+    append_record_to_map(data, data_size,
+                        line_key,
+                        line_key_len,
+                        line_content, line_content_len, 0);
+    return 0;
+}
+
 int flb_tail_file_pack_line(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
                             struct flb_time *time, char *data, size_t data_size,
                             struct flb_tail_file *file, size_t processed_bytes)
 {
-    int map_num = 1;
+    /* considering entires for "log" and "source_log" */
+    int map_num = 2;
     struct flb_tail_config *ctx = file->config;
 
     if (file->config->path_key != NULL) {
@@ -193,6 +207,11 @@ int flb_tail_file_pack_line(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
 
     msgpack_pack_str(mp_pck, flb_sds_len(ctx->key));
     msgpack_pack_str_body(mp_pck, ctx->key, flb_sds_len(ctx->key));
+    msgpack_pack_str(mp_pck, data_size);
+    msgpack_pack_str_body(mp_pck, data, data_size);
+
+    msgpack_pack_str(mp_pck, strlen(SOURCE_LOG_KEY));
+    msgpack_pack_str_body(mp_pck, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
     msgpack_pack_str(mp_pck, data_size);
     msgpack_pack_str_body(mp_pck, data, data_size);
 
@@ -304,7 +323,7 @@ static int process_content(struct flb_tail_file *file, size_t *bytes)
                 if (ctx->multiline == FLB_TRUE) {
                     flb_tail_mult_flush(out_sbuf, out_pck, file, ctx);
                 }
-
+                flb_tail_file_pack_source_log(out_sbuf, out_pck, &out_time,(char**) &out_buf, &out_size,SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY), line, line_len);
                 flb_tail_pack_line_map(out_sbuf, out_pck, &out_time,
                                        (char**) &out_buf, &out_size, file,
                                        processed_bytes);
@@ -345,6 +364,7 @@ static int process_content(struct flb_tail_file *file, size_t *bytes)
                                     line, line_len, file, processed_bytes);
         }
 #else
+
         flb_time_get(&out_time);
         flb_tail_file_pack_line(out_sbuf, out_pck, &out_time,
                                 line, line_len, file, processed_bytes);
@@ -706,6 +726,7 @@ int flb_tail_file_append(char *path, struct stat *st, int mode,
     file->mult_flush_timeout = 0;
     file->mult_skipping = FLB_FALSE;
     msgpack_sbuffer_init(&file->mult_sbuf);
+    msgpack_sbuffer_init(&file->mult_sbuf_for_source_log);
     file->dmode_flush_timeout = 0;
     file->dmode_complete = true;
     file->dmode_buf = flb_sds_create_size(ctx->docker_mode == FLB_TRUE ? 65536 : 0);

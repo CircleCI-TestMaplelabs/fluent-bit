@@ -58,6 +58,9 @@ struct flb_tail_file {
     int mult_keys;              /* total number of buffered keys         */
     msgpack_sbuffer mult_sbuf;  /* temporary msgpack buffer               */
     msgpack_packer mult_pck;    /* temporary msgpack packer               */
+    msgpack_sbuffer mult_sbuf_for_source_log; /* temporary msgpack buffer for source log */
+    msgpack_packer mult_pck_for_source_log; /* temporary msgpack packer for source log */
+    size_t source_multi_log_size; /*temporary computed size value for current multiline context*/
     struct flb_time mult_time;  /* multiline time parsed from first line */
 
     /* docker mode */
