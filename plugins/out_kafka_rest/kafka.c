@@ -311,11 +311,15 @@ static void cb_kafka_flush(const void *data, size_t bytes,
                                             FLB_PACK_JSON_DATE_ISO8601,
                                             NULL);
 
-
+    if (!source_log_json) {
+        flb_upstream_conn_release(u_conn);
+        FLB_OUTPUT_RETURN(FLB_ERROR);
+    }
     /* Convert format */
     js = kafka_rest_format(data, bytes, tag, tag_len, &js_size, ctx);
     if (!js) {
         flb_upstream_conn_release(u_conn);
+        flb_sds_destroy(source_log_json);
         FLB_OUTPUT_RETURN(FLB_ERROR);
     }
 
@@ -344,6 +348,7 @@ static void cb_kafka_flush(const void *data, size_t bytes,
     ret = flb_http_do(c, &b_sent);
     if (ret != 0) {
         flb_plg_warn(ctx->ins, "http_do=%i", ret);
+        flb_sds_destroy(source_log_json);
         goto retry;
     }
     else {
@@ -378,10 +383,10 @@ static void cb_kafka_flush(const void *data, size_t bytes,
                     }
                 }
             }
-
+            flb_sds_destroy(source_log_json);
             goto retry;
         }
-
+        flb_sds_destroy(source_log_json);
         if (c->resp.payload_size > 0) {
             flb_plg_debug(ctx->ins, "Kafka REST response\n%s",
                           c->resp.payload);
