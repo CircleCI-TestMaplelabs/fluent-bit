@@ -365,8 +365,10 @@ static void cb_kafka_flush(const void *data, size_t bytes,
 
                 if (current_time >= ctx->next_scheduled_chunk_logging_time)
                 {
-                    flb_plg_error(ctx->ins, "Rest Server rejected chunk with source log: %s", source_log_json);
-                    flb_plg_error(ctx->ins, "Rest Server rejected chunk's kafka formatted request payload: %s", js);
+                    flb_plg_error(ctx->ins, "Logging rest Server rejected chunk with source log");
+                    write(STDOUT_FILENO, source_log_json, flb_sds_len(source_log_json));
+                    flb_plg_error(ctx->ins, "Logging rest Server rejected chunk's kafka formatted request payload");
+                    write(STDOUT_FILENO, js, flb_sds_len(js));
                     if ((double) (current_time - ctx->next_scheduled_chunk_logging_time)/ctx->failed_chunk_logging_interval_in_sec > 1)
                     {
                         ctx-> num_chunks_logged_per_observation_period = 1;
