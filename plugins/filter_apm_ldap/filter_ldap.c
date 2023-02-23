@@ -111,50 +111,141 @@ static int cb_modifier_init_apm_ldap(struct flb_filter_instance *f_ins,
 
 static int get_ldap(char *path, int port, msgpack_packer *packer)
 {
-    int valread = 0, retry = 0;
-    char buffer[1024] = {0};
+    int size_recv = 0, retry = 0, total_size = 0,buffer_counter = 1;
+    int buffer_for_msgpack_len_max = buffer_counter*SOCKET_BUF_SIZE;
+    int ldap_resp_buffer_size = 0;
+    int actual_buffer_size_recv = 0;
+    flb_sds_t buffer_for_msgpack = flb_sds_create_size(buffer_for_msgpack_len_max);
+    if (!buffer_for_msgpack) {
+        return data_collection_failed;
+    } 
+    flb_sds_t tmp;
+    flb_sds_t buffer_from_server = flb_sds_create_size(SOCKET_BUF_SIZE);
+    if (!buffer_from_server) {
+        flb_sds_destroy(buffer_for_msgpack); 
+        return data_collection_failed;
+    } 
     char *entry;
     int sockSendStatus = 1;
-    sockSend:
-        if ((sockSendStatus = send(ldapSocketFD, path, strlen(path), 0)) == -1)
-        {
-            flb_error("[%s] Error in sending the path %s", PLUGIN_NAME, path);
-            goto retry;
-        }
-    sockReceive:
-        valread = recv(ldapSocketFD, buffer, 1024, 0);
-        if (valread < 0 )
+sockSend:
+    if ((sockSendStatus = send(ldapSocketFD, path, strlen(path), 0)) == -1)
+    {
+        flb_error("[%s] Error in sending the agent %s", PLUGIN_NAME, path);
+        goto retry;
+    }
+    while (1)
+    {
+        memset(buffer_from_server, 0, SOCKET_BUF_SIZE);
+        size_recv = recv(ldapSocketFD, buffer_from_server, SOCKET_BUF_SIZE, 0);
+        if (size_recv < 0)
         {
             retry:
-                while(1)
+                while (1)
                 {
                     flb_info("[%s] Trying to reconnect the socket: retry %d/%d", PLUGIN_NAME, retry, RETRIES) ;
                     if (connect_socket(port) < 0)
                     {
                         flb_info("[%s] Unable to reconnect the socket", PLUGIN_NAME);
                         if (retry++ > RETRIES) {
+                            flb_sds_destroy(buffer_from_server); 
+                            flb_sds_destroy(buffer_for_msgpack);
                             return unable_to_connect;
                         }
                         continue;
                     }
+                    retry = 0;
                     if (sockSendStatus == -1)
                     {
                         goto sockSend;
                     }
-                    else
-                    {
-                        goto sockReceive;
-                    }
+                    break;
                 }
         }
-    entry = strtok(buffer, "}");
+        else
+        {
+            if (size_recv == 5) 
+            {
+                bool to_discard = (strcmp(buffer_from_server, END_OF_MESSAGE) == 0);
+                if (to_discard)
+                {
+                    flb_debug("~eom~ sent by the socket: %d",size_recv);
+                    break;
+                }
+            }
+            char *result_size_from_server_check = strstr(buffer_from_server, BUFFER_SIZE_RESPONSE);
+            if (result_size_from_server_check)
+            {
+                char * split_buffer_size = strtok(buffer_from_server, "}");	
+                char * actual_buffer = strtok(NULL, "");	
+                char * split_key_value_buffer_size= strtok(buffer_from_server, ":");	
+                char * actual_size_of_response = strtok(NULL, "");	
+                /*+1 for } sent from the binary*/
+                ldap_resp_buffer_size = BUFFER_RESPONSE_SIZE + strlen(actual_size_of_response)+ atoi(actual_size_of_response)+1;	
+                actual_buffer_size_recv = size_recv - BUFFER_RESPONSE_SIZE - strlen(actual_size_of_response) -1;
+                tmp = flb_sds_cat(buffer_from_server, actual_buffer, actual_buffer_size_recv);
+                if (!tmp) {
+                    flb_sds_destroy(buffer_from_server);
+                    flb_sds_destroy(buffer_for_msgpack);
+                    return data_collection_failed;
+                }
+                buffer_from_server = tmp;
+                if (ldap_resp_buffer_size > 1024){
+                    buffer_counter = ldap_resp_buffer_size/SOCKET_BUF_SIZE;
+                    if (ldap_resp_buffer_size%SOCKET_BUF_SIZE > 0){
+                        buffer_counter += 1; 
+                    }
+                    buffer_for_msgpack_len_max = buffer_counter*SOCKET_BUF_SIZE;
+                    tmp = flb_sds_increase(buffer_for_msgpack, buffer_for_msgpack_len_max);
+                    if (!tmp) {
+                        flb_sds_destroy(buffer_from_server);
+                        flb_sds_destroy(buffer_for_msgpack);
+                        return data_collection_failed;
+                    }
+                    buffer_for_msgpack = tmp;                        
+                }             
+            } else {
+                actual_buffer_size_recv = size_recv;
+            }
+            flb_debug("Socket data being received in chunks: %d",actual_buffer_size_recv);       
+            if (total_size + actual_buffer_size_recv <= buffer_for_msgpack_len_max)
+            {
+                tmp = flb_sds_cat(buffer_for_msgpack, buffer_from_server, actual_buffer_size_recv);
+                if (!tmp) {
+                    flb_sds_destroy(buffer_from_server);
+                    flb_sds_destroy(buffer_for_msgpack);
+                    return data_collection_failed;
+                }
+                buffer_for_msgpack = tmp;
+                total_size += actual_buffer_size_recv;
+            }
+            else	
+            {	
+                flb_error("Buffer Overflow occurred = %s ", buffer_from_server);
+                break;	
+            }
+            
+            if (size_recv < SOCKET_BUF_SIZE)
+            {
+                break;
+            }
+        }
+    }
 
+    int desiredSplit = NEW_ENTRIES * 2;
+    entry = strtok(buffer_for_msgpack, "}");
     while (entry != NULL)
     {
+        if (desiredSplit == 0 )
+        {
+            break;
+        }
         msgpack_pack_str(packer, strlen(entry));
         msgpack_pack_str_body(packer, entry, strlen(entry));
         entry = strtok(NULL, "}");
+        desiredSplit = desiredSplit - 1;
     }
+    flb_sds_destroy(buffer_from_server);
+    flb_sds_destroy(buffer_for_msgpack);
     return data_collected;
 }
 
@@ -178,7 +269,6 @@ static int cb_modifier_filter_apm_ldap(const void *data, size_t bytes,
     msgpack_sbuffer_init(&sbuffer);
     msgpack_packer_init(&packer, &sbuffer, msgpack_sbuffer_write);
     msgpack_unpacked_init(&unpacked);
-    size_t ldappath_len = 0;
     while (msgpack_unpack_next(&unpacked, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS)
     {
         if (unpacked.data.type != MSGPACK_OBJECT_ARRAY)
@@ -204,17 +294,19 @@ static int cb_modifier_filter_apm_ldap(const void *data, size_t bytes,
         {
             old_record_key = &(kv + i)->key;
             old_record_value = &(kv + i)->val;
-            if (old_record_key->type == MSGPACK_OBJECT_STR && !strncasecmp(old_record_key->via.str.ptr, ctx->lookup_key, ctx->lookup_key_len))
+            if (old_record_key->type == MSGPACK_OBJECT_STR && !strncasecmp(old_record_key->via.str.ptr, ctx->lookup_key, ctx->lookup_key_len) && old_record_value->via.str.size != 0)
             {
                 char *logpath = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
-                ldappath_len =  old_record_value->via.str.size;
                 flb_trace("[%s] Sending ldap path: %s", PLUGIN_NAME, logpath);
                 //populates record map with agent information
                 collection_status = get_ldap(logpath, atoi(ctx->port), &packer);
-                if (collection_status == unable_to_connect)
+                if (collection_status  != data_collected)
                 {
-                    flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, ldapRetryConnectCounter, GLOBALRETRIES);
-                    ldapRetryConnectCounter++;
+                    if (collection_status == unable_to_connect) 
+                    {
+                        flb_error("[%s] Unable to establish connection with the socket server: Log retry %d/%d", PLUGIN_NAME, ldapRetryConnectCounter, GLOBALRETRIES);
+                        ldapRetryConnectCounter++;
+                    }
                 }
                 flb_free(logpath);
             }
