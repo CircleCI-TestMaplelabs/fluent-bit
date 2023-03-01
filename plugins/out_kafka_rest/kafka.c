@@ -307,7 +307,7 @@ static void cb_kafka_flush(const void *data, size_t bytes,
 
     flb_sds_t source_log_json;
     source_log_json = flb_pack_msgpack_to_json_format(data, bytes,
-                                            FLB_PACK_JSON_FORMAT_LINES,
+                                            FLB_PACK_JSON_FORMAT_JSON,
                                             FLB_PACK_JSON_DATE_ISO8601,
                                             NULL);
 
@@ -365,9 +365,11 @@ static void cb_kafka_flush(const void *data, size_t bytes,
 
                 if (current_time >= ctx->next_scheduled_chunk_logging_time)
                 {
-                    flb_plg_error(ctx->ins, "Logging rest Server rejected chunk with source log");
+                    write(STDOUT_FILENO, "\nRejected Fluent Chunk with source log: ", 40);
                     write(STDOUT_FILENO, source_log_json, flb_sds_len(source_log_json));
-                    flb_plg_error(ctx->ins, "Logging rest Server rejected chunk's kafka formatted request payload");
+                    write(STDOUT_FILENO, "\n(Match_Tag):", 13);
+                    write(STDOUT_FILENO, ctx->ins->match, strlen(ctx->ins->match));
+                    write(STDOUT_FILENO, "\nRejected Fluent Chunk kafka formatted request payload: ", 64);
                     write(STDOUT_FILENO, js, flb_sds_len(js));
                     if ((double) (current_time - ctx->next_scheduled_chunk_logging_time)/ctx->failed_chunk_logging_interval_in_sec > 1)
                     {
