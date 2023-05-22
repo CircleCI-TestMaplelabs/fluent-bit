@@ -396,6 +396,9 @@ struct flb_http_client *request_do(struct flb_aws_client *aws_client,
     }
 
     /* Perform request */
+    
+    // set buffer size of 24000
+    flb_http_buffer_size(c, 24000);
     ret = flb_http_do(c, &b_sent);
 
     if (ret != 0 || c->resp.status != 200) {
@@ -549,6 +552,7 @@ flb_sds_t flb_json_get_val(char *response, size_t response_len, char *key)
         return NULL;
     }
 
+    flb_debug("[aws_client] response received - %s", response);
     ret = jsmn_parse(&parser, response, response_len,
                      tokens, tokens_size);
 
