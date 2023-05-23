@@ -298,8 +298,8 @@ static int in_s3_collect(struct flb_input_instance *ins,
         flb_plg_info(ctx->ins,"Next scheduled object list time %d", ctx -> scheduled_object_list_time );
 
     } else {
-        
-        for (int i = 0; i < TABLE_SIZE ; i++) {
+        int i;
+        for ( i = 0; i < TABLE_SIZE ; i++) {
             struct entry_int_val* current = ctx -> file_with_last_modified_time->table[i];
             while (current != NULL) {
                 flb_sds_t request_route =  flb_malloc((4 + strlen(current->key))  * sizeof(char));
@@ -332,8 +332,8 @@ static int in_s3_collect(struct flb_input_instance *ins,
             }
         }
     }
-  
-    for (int i = 0; i < TABLE_SIZE ; i++) {
+    int i;
+    for (i = 0; i < TABLE_SIZE ; i++) {
         if ((ctx -> file_with_pending_bytes_to_consume->table[i]!= NULL)) {
             flb_plg_debug(ctx->ins, "**file_with_pending_bytes_to_consume %s , %d",ctx -> file_with_pending_bytes_to_consume->table[i]->key, ctx -> file_with_pending_bytes_to_consume->table[i]->value);  
         }
@@ -354,7 +354,8 @@ static int in_s3_collect(struct flb_input_instance *ins,
     s3_headers -> key_len = 5;    
 
     // int total_bytes_added_to_chunk = 0;
-    for (int index = 0; index < TABLE_SIZE ; index++) {
+    int index;
+    for (index = 0; index < TABLE_SIZE ; index++) {
         struct entry_int_val* current = ctx -> file_with_pending_bytes_to_consume->table[index];
         while (current != NULL) {
             if (current -> value ==0) {
@@ -632,7 +633,8 @@ static int in_s3_collect(struct flb_input_instance *ins,
                         }
                         follow_up_objects_in_same_hash = follow_up_objects_in_same_hash-> next;
                     }
-                    for (int iter = index + 1; iter < TABLE_SIZE ; iter++) {
+                    int iter;
+                    for (iter = index + 1; iter < TABLE_SIZE ; iter++) {
                         struct entry_int_val* follow_up_table_entry = ctx -> file_with_pending_bytes_to_consume->table[iter];
                         while (follow_up_table_entry != NULL) {
                             if (follow_up_table_entry -> value !=0) {
@@ -840,8 +842,8 @@ static int in_s3_init(struct flb_input_instance *in,
             individual_file = strtok(NULL, delim);
         }
     }
-
-    for (int i = 0; i < TABLE_SIZE ; i++) {
+    int i;
+    for (i = 0; i < TABLE_SIZE ; i++) {
         if (ctx -> desired_files_for_monitor->table[i]!= NULL){
             flb_plg_debug(ctx->ins, "desired_file_set_for_monitoring: %s",ctx -> desired_files_for_monitor->table[i]->key);
         }

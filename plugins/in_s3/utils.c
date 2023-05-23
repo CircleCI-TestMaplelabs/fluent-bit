@@ -72,7 +72,8 @@ struct hash_table_string {
 
 static unsigned int hash(const flb_sds_t key) {
     unsigned int hashval = 0;
-    for (int i = 0; key[i] != '\0'; i++) {
+    int i;
+    for (i = 0; key[i] != '\0'; i++) {
         hashval = key[i] + (hashval << 5) - hashval;
     }
     return hashval % TABLE_SIZE;
@@ -154,7 +155,8 @@ static int hash_table_int_val_delete(struct hash_table_int* ht, const flb_sds_t 
 
 static void hash_table_int_free(struct hash_table_int* ht) {
     if (ht) {
-        for (int i = 0; i < TABLE_SIZE ; i++) {
+        int i;
+        for (i = 0; i < TABLE_SIZE ; i++) {
             struct entry_int_val* current = ht->table[i];
             struct entry_int_val* previous = NULL;
             while (current != NULL) {
@@ -232,7 +234,8 @@ static flb_sds_t hash_table_string_val_get(struct hash_table_string* ht, const f
 
 static void hash_table_string_free(struct hash_table_string* ht) {
     if (ht) {
-        for (int i = 0; i < TABLE_SIZE ; i++) {
+        int i;
+        for (i = 0; i < TABLE_SIZE ; i++) {
             struct entry_string_val* current = ht->table[i];
             struct entry_string_val* previous = NULL;
             while (current != NULL) {
@@ -587,8 +590,8 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
     char  *xml_size_attrib =   "<Size>";
     char  *xml_last_modified_attrib = "<LastModified>";
     int current_time = (int)time(NULL);
-
-    for (int i=0; i < max_occurence; i ++) {
+    int i;
+    for (i=0; i < max_occurence; i ++) {
 
             int desired_for_monitorting = 1;
             if (key_attrib_temp_val) {
@@ -622,7 +625,8 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
                 desired_for_monitorting = -1;
             }
             int is_desired_s3_file = -1;
-            for (int i = 0; i < TABLE_SIZE ; i++) {
+            int i;
+            for (i = 0; i < TABLE_SIZE ; i++) {
                 struct entry_int_val* current = ctx -> desired_files_for_monitor->table[i];
                 while (current != NULL) {
                     is_desired_s3_file = fnmatch(current->key, key_attrib_temp_val , FNM_PATHNAME);
@@ -636,8 +640,7 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
                 } 
             }
             int is_not_desired_s3_file = -1;
-            
-            for (int i = 0; i < TABLE_SIZE ; i++) {
+            for (i = 0; i < TABLE_SIZE ; i++) {
                 struct entry_int_val* current = ctx -> exclusion_files->table[i];
                 while (current != NULL) {
                     is_not_desired_s3_file = fnmatch(current->key, key_attrib_temp_val , FNM_PATHNAME);

@@ -529,7 +529,8 @@ int flb_tail_mult_flush(msgpack_sbuffer *mp_sbuf, msgpack_packer *mp_pck,
                 continue;
             }
             msgpack_object root = unpacked.data;
-            for (int i = 0; i < root.via.map.size; i++) {
+            int i;
+            for (i = 0; i < root.via.map.size; i++) {
                 k = root.via.map.ptr[i].key;
                 v = root.via.map.ptr[i].val;
                 msgpack_pack_str_body(mp_pck, v.via.str.ptr,
