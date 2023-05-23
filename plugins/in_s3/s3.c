@@ -294,7 +294,7 @@ static int in_s3_collect(struct flb_input_instance *ins,
                 break;
             }
         }
-        ctx -> scheduled_object_list_time = current_time + ctx -> refresh_object_listing;
+        ctx -> scheduled_object_list_time = ((current_time/ctx -> refresh_object_listing) + 1) * ctx -> refresh_object_listing;
         flb_plg_info(ctx->ins,"Next scheduled object list time %d", ctx -> scheduled_object_list_time );
 
     } else {
@@ -892,7 +892,7 @@ static int in_s3_init(struct flb_input_instance *in,
     flb_input_set_context(in, ctx);
 
 
-    ctx -> scheduled_object_list_time = (int)time(NULL) - 10;
+    ctx -> scheduled_object_list_time = ((int)time(NULL)/ctx -> scheduled_object_list_time) * ctx -> scheduled_object_list_time;
    
     // ctx -> max_bytes_to_append_to_chunk = (int)((float) in -> mem_buf_limit * ((float)MAX_CHUNK_SIZE_BUFFER_PERCENT / (float)100));
     

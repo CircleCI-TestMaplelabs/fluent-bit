@@ -492,8 +492,9 @@ static int cb_db_function(void *data, int argc, char **argv, char **cols)
         int last_mod_time_epoch = hash_table_int_val_get(qs->file_with_last_modified_time, qs->object);
         if (last_mod_time_epoch != -1) 
         {
-            int older_time_epoch = (int)time(NULL)-qs->ignore_older;                
-            if (last_mod_time_epoch <= older_time_epoch)
+            int current_time = (int)time(NULL);
+            int last_mod_time_epoch_with_twice_the_offset = ((last_mod_time_epoch/qs->ignore_older)+2) * qs->ignore_older;
+            if (current_time >= last_mod_time_epoch_with_twice_the_offset)
             {
                 return 0;   
             }
@@ -582,6 +583,7 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
     char  *xml_key_attrib =   "<Key>";
     char  *xml_size_attrib =   "<Size>";
     char  *xml_last_modified_attrib = "<LastModified>";
+    int current_time = (int)time(NULL);
 
     for (int i=0; i < max_occurence; i ++) {
 
@@ -695,13 +697,12 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
                 return NULL;
             }
             
-            
             int last_mod_time_epoch = convert_to_epoch(last_mod_temp_val);
             flb_sds_destroy(last_mod_temp_val);
             last_mod_temp_val = NULL;
 
-            int older_time_epoch = (int)time(NULL)-ctx->ignore_older;
-            if (last_mod_time_epoch <= older_time_epoch)
+            int last_mod_time_epoch_with_twice_the_offset = ((last_mod_time_epoch/ctx->ignore_older)+2) * ctx->ignore_older;
+            if (current_time >= last_mod_time_epoch_with_twice_the_offset)
             {
                 if (desired_for_monitorting == 1)  {
                     hash_table_int_val_delete(ctx -> file_with_consumed_offset, key_attrib_temp_val);
@@ -715,6 +716,7 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
                 response = end_last_mod_attrib;
                 continue;
             }
+
             if (desired_for_monitorting == -1)  {
                 response = end_last_mod_attrib;
                 continue;
