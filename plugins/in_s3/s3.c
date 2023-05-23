@@ -33,10 +33,10 @@ static struct flb_config_map config_map[] = {
     {FLB_CONFIG_MAP_STR, "prefix", NULL,
      0, FLB_TRUE, offsetof(struct flb_in_s3_config, prefix),
      "prefix (folder in which objects reside)"},
-    {FLB_CONFIG_MAP_TIME, "ignore_older", NULL,
+    {FLB_CONFIG_MAP_TIME, "ignore_older", "1d",
      0, FLB_TRUE, offsetof(struct flb_in_s3_config, ignore_older),
      "ignore_older flag"},
-    {FLB_CONFIG_MAP_TIME, "refresh_object_listing", NULL,
+    {FLB_CONFIG_MAP_TIME, "refresh_object_listing", "1d",
      0, FLB_TRUE, offsetof(struct flb_in_s3_config, refresh_object_listing),
      "refresh_object_listing flag"},
     {FLB_CONFIG_MAP_STR, "db", "s3-log-tracker.db",
@@ -892,11 +892,8 @@ static int in_s3_init(struct flb_input_instance *in,
     flb_input_set_context(in, ctx);
 
 
-    ctx -> scheduled_object_list_time = ((int)time(NULL)/ctx -> scheduled_object_list_time) * ctx -> scheduled_object_list_time;
-   
-    // ctx -> max_bytes_to_append_to_chunk = (int)((float) in -> mem_buf_limit * ((float)MAX_CHUNK_SIZE_BUFFER_PERCENT / (float)100));
-    
-    // flb_plg_debug(ctx->ins,"mem buf limit in bytes: %d", ctx -> max_bytes_to_append_to_chunk );
+    ctx -> scheduled_object_list_time = ((int)time(NULL)/ctx -> refresh_object_listing) * ctx -> refresh_object_listing;
+
     ret = flb_input_set_collector_time(in,
                                        in_s3_collect,
                                        ctx->interval_sec,

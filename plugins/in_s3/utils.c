@@ -489,20 +489,23 @@ static int cb_db_function(void *data, int argc, char **argv, char **cols)
     if (qs->populate_state_info == 1) {
 
 
-        int last_mod_time_epoch = hash_table_int_val_get(qs->file_with_last_modified_time, qs->object);
-        if (last_mod_time_epoch != -1) 
+        int current_time = (int)time(NULL);
+        int last_mod_time_epoch_with_twice_the_offset = ((qs->last_modified_time/qs->ignore_older)+2) * qs->ignore_older;
+        if (current_time >= last_mod_time_epoch_with_twice_the_offset)
         {
-            int current_time = (int)time(NULL);
-            int last_mod_time_epoch_with_twice_the_offset = ((last_mod_time_epoch/qs->ignore_older)+2) * qs->ignore_older;
-            if (current_time >= last_mod_time_epoch_with_twice_the_offset)
-            {
-                return 0;   
-            }
-            hash_table_int_val_update(qs -> file_with_last_modified_time, qs->object, last_mod_time_epoch);
+            return 0;
+        }
+
+        int last_mod_time_epoch = hash_table_int_val_get(qs->file_with_last_modified_time, qs->object);
+        if (last_mod_time_epoch == -1)
+        {
+            hash_table_int_val_insert(qs -> file_with_last_modified_time, qs->object, qs->last_modified_time);
+        } else {
+            hash_table_int_val_update(qs -> file_with_last_modified_time, qs->object, qs->last_modified_time);
         }
         
      
-        flb_debug("DB State => object: %s, size: %d, consumed_offset: %d, last_modified_time: %d",   qs->object, qs->size,  qs->consumed_offset, qs->last_modified_time);
+        flb_debug("DB State => object: %s, size: %d, consumed_offset: %d, last_modified_time: %d, threshold time: %d",   qs->object, qs->size,  qs->consumed_offset, qs->last_modified_time, last_mod_time_epoch_with_twice_the_offset);
 
         int value = hash_table_int_val_get(qs -> file_with_consumed_offset, qs->object);
         if (value == -1) {
@@ -710,7 +713,7 @@ static flb_sds_t flb_update_xml_val_in_hash_table(struct flb_in_s3_config *ctx, 
                     hash_table_int_val_delete(ctx -> file_with_size, key_attrib_temp_val);
                     hash_table_int_val_delete(ctx -> file_with_last_modified_time, key_attrib_temp_val);
                     hash_table_string_val_delete(ctx -> file_with_last_consumed_line, key_attrib_temp_val);
-                    flb_debug("ignoring older object %s with last mod time %d", key_attrib_temp_val, last_mod_time_epoch);
+                    flb_debug("ignoring older object %s with last mod time %d, threshold time %d", key_attrib_temp_val, last_mod_time_epoch, last_mod_time_epoch_with_twice_the_offset);
                 }
                
                 response = end_last_mod_attrib;
