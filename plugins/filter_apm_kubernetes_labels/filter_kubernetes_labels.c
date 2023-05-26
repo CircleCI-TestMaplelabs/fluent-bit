@@ -179,7 +179,7 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             snappyflow_labels_configured_index_store[i] = -1;
         }
 
-        char *pod_name_populated;
+        char *pod_name_populated = NULL;
 
         
 
@@ -213,10 +213,10 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             }
         }
 
-        if ((pod_name_populated != NULL) && (pod_name_populated[0] == '\0')) {
+        if ((!pod_name_populated) || ((pod_name_populated != NULL) && (pod_name_populated[0] == '\0'))) {
             msgpack_unpacked_destroy(&unpacked);
             msgpack_sbuffer_destroy(&sbuffer);
-            flb_error("Pod name not available in log record");
+            // flb_error("Pod name not available in log record");
             return FLB_FILTER_NOTOUCH;
         }
         int key_store_iter;
