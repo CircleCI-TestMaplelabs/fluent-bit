@@ -56,7 +56,6 @@
 #define FLB_API_TLS   FLB_TRUE
 
 /* Kubelet info */
-#define FLB_KUBELET_HOST  "127.0.0.1"
 
 /*
  * Default expected Kubernetes tag prefix, this is used mostly when source
@@ -153,7 +152,8 @@ struct flb_kube {
 
     int use_kubelet;
     int kubelet_port;
-
+    char *kubelet_host;
+    
     struct flb_tls *tls;
 
     struct flb_config *config;

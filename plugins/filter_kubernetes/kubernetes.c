@@ -833,6 +833,13 @@ static struct flb_config_map config_map[] = {
      0, FLB_TRUE, offsetof(struct flb_kube, kubelet_port),
      "kubelet port to connect with when using kubelet"
     },
+    /* Will only check when "use_kubelet" config is set to true
+     */
+    {
+     FLB_CONFIG_MAP_STR, "kubelet_host", "127.0.0.1",
+     0, FLB_TRUE, offsetof(struct flb_kube, kubelet_host),
+     "kubelet host to connect with when using kubelet"
+    },
     /* EOF */
     {0}
 };
