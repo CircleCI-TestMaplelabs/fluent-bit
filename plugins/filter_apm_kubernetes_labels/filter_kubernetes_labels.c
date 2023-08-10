@@ -39,6 +39,7 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     if (file_path == NULL)
     {
         flb_error("Lookup key mapping_path not found in plugin configuration");
+        flb_free(file_path);
         return -1;
     }
     //read file to buffer
@@ -97,12 +98,34 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     else
         ctx -> projname_labe1 = DEFAULT_PROJECTNAME_LABEL;
 
+    char* proj_name = getenv(SFAPM_PROJECT_NAME);
+    if(proj_name)
+        ctx -> projname = proj_name;
+    else
+        ctx -> projname = DEFAULT_PROJECTNAME;
+
 
     char* app_name_label = getenv(SFAPM_APPNAME_LABEL);
     if(app_name_label)
         ctx -> appname_labe1 = app_name_label;
     else
         ctx -> appname_labe1 = DEFAULT_APPNAME_LABEL;
+
+    char* app_name = getenv(SFAPM_APP_NAME);
+    if(app_name)
+        ctx -> appname = app_name;
+    else
+        ctx -> appname = DEFAULT_APPNAME;
+    
+    bool monitor_pods_label = getenv(MONITOR_ALL_PODS);
+    // printf("set monitor pods flag to : %s", monitor_pods_label ? "true" : "false");
+    if(monitor_pods_label)
+        ctx -> monitor_pods_label = monitor_pods_label;
+    else
+        ctx -> monitor_pods_label = DEFAULT_MONITOR_PODS_LABEL;
+
+    flb_free(file_path);
+
     return 0;
 }
 
@@ -181,8 +204,6 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
 
         char *pod_name_populated = NULL;
 
-        
-
         msgpack_pack_array(&packer, 2);
         flb_time_append_to_msgpack(&tm, &packer, 0);
         kv = obj->via.map.ptr;
@@ -190,8 +211,10 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         {
             old_record_key = &(kv + i)->key;
             old_record_value = &(kv + i)->val;
+
             if (old_record_key->type == MSGPACK_OBJECT_STR)
             {
+                
                 if ((!strncasecmp(old_record_key->via.str.ptr, ctx -> projname_labe1, strlen(ctx -> projname_labe1))) || 
                     (!strncasecmp(old_record_key->via.str.ptr, ctx -> appname_labe1, strlen(ctx -> appname_labe1))) ||
                     (!strncasecmp(old_record_key->via.str.ptr, COMPONENT_NAME_LABEL, COMPONENT_NAME_LABEL_LEN)) ||
@@ -212,10 +235,15 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                 }
             }
         }
+        bool flag=true;
+        if(ctx-> monitor_pods_label){
+            flag = false;
+        }
 
         if ((!pod_name_populated) || ((pod_name_populated != NULL) && (pod_name_populated[0] == '\0'))) {
             msgpack_unpacked_destroy(&unpacked);
             msgpack_sbuffer_destroy(&sbuffer);
+            flb_free(pod_name_populated);
             // flb_error("Pod name not available in log record");
             return FLB_FILTER_NOTOUCH;
         }
@@ -228,13 +256,14 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         int key_len;
         int val_len;
         bool pod_name_matched = false;
-        for (i = 1; i < ctx->jsmn_ret; i++) {
+        for (i = 1; ((i < ctx->jsmn_ret) && (flag)); i++) {
             t = &ctx->jsmn_tokens[i];
             if (t->type != JSMN_STRING) {
                 continue;
             }
 
             if (t->start == -1 || t->end == -1 || (t->start == 0 && t->end == 0)){
+                flb_free(t);
                 break;
             }
             key = ctx-> json_buf + t->start;
@@ -243,14 +272,13 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             i++;
             t = &ctx->jsmn_tokens[i];
             if (t->type == JSMN_OBJECT) {
-                if (pod_name_matched) 
-                {
-
-                    break;
-                }
                 if (!strncasecmp(key, pod_name_populated, strlen(pod_name_populated)))
                 {
                     pod_name_matched = true;
+                }
+                if (pod_name_matched) 
+                {
+                    break;
                 }
                 continue;
             }
@@ -291,6 +319,9 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             }
 
         }
+        if (ctx-> monitor_pods_label){
+            new_fields_to_add = new_fields_to_add + 2;
+        }
         msgpack_pack_map(&packer, map_num + new_fields_to_add);
         for (i = 0 ; i<strlen(snappyflow_labels_configured_key_store); i++)
         {
@@ -303,6 +334,20 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                 flb_free(snappyflow_labels_configured_key_store[i]);
             }
         }
+        if(ctx-> monitor_pods_label){
+
+            msgpack_pack_str(&packer,strlen(ctx-> projname_labe1));
+            msgpack_pack_str_body(&packer, ctx-> projname_labe1, strlen(ctx-> projname_labe1));
+            msgpack_pack_str(&packer, strlen(ctx-> projname));
+            msgpack_pack_str_body(&packer, ctx-> projname, strlen(ctx-> projname));
+
+            msgpack_pack_str(&packer, strlen(ctx-> appname_labe1));
+            msgpack_pack_str_body(&packer, ctx-> appname_labe1, strlen(ctx-> appname_labe1));
+            msgpack_pack_str(&packer, strlen(ctx-> appname));
+            msgpack_pack_str_body(&packer, ctx-> appname, strlen(ctx-> appname));
+
+        }
+
         int iter;
         for (i = 0; i < map_num; i++)
         {
@@ -322,8 +367,8 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             }
         
         }
-        
         flb_free(pod_name_populated);
+
     }
 
     

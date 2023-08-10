@@ -3,14 +3,21 @@
 
 #define SFAPM_PROJECTNAME_LABEL "SFAPM_PROJECTNAME_LABEL"
 #define SFAPM_APPNAME_LABEL "SFAPM_APPNAME_LABEL"
+#define SFAPM_PROJECT_NAME "SFAPM_PROJECT_NAME"
+#define SFAPM_APP_NAME "SFAPM_APP_NAME"
+#define MONITOR_ALL_PODS "MONITOR_ALL_PODS"
 
 #define DEFAULT_PROJECTNAME_LABEL "snappyflow/projectname"
 #define DEFAULT_APPNAME_LABEL "snappyflow/appname"
+#define DEFAULT_PROJECTNAME "project"
+#define DEFAULT_APPNAME "app"
 #define COMPONENT_NAME_LABEL "snappyflow/component"
 #define UA_PARSER_LABEL "snappyflow/ua_parser"
 #define GEO_INFO_LABEL "snappyflow/geo_info"
 #define EXCLUDE_CONTAINER_LABEL "snappyflow/exclude-containers-log"
 #define POD_NAME_IDENT_KEY "pod_name"
+
+#define DEFAULT_MONITOR_PODS_LABEL false
 
 #define POD_NAME_IDENT_KEY_LEN 8
 #define DEFAULT_PROJECTNAME_LABEL_LEN 22
@@ -35,6 +42,9 @@ struct kubernetes_labels_ctx {
     int jsmn_ret;
     char* json_buf;
     char* appname_labe1;
+    char* appname;
     char* projname_labe1;
+    char* projname;
+    bool monitor_pods_label;
     struct flb_filter_instance *ins;
 };
