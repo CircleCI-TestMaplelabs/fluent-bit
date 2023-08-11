@@ -39,7 +39,6 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     if (file_path == NULL)
     {
         flb_error("Lookup key mapping_path not found in plugin configuration");
-        flb_free(file_path);
         return -1;
     }
     //read file to buffer
@@ -117,12 +116,12 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     else
         ctx -> appname = DEFAULT_APPNAME;
     
-    bool monitor_pods_label = getenv(MONITOR_ALL_PODS);
-    // printf("set monitor pods flag to : %s", monitor_pods_label ? "true" : "false");
-    if(monitor_pods_label)
-        ctx -> monitor_pods_label = monitor_pods_label;
+    bool monitor_pods_logs = getenv(MONITOR_ALL_PODS);
+    // printf("set monitor pods flag to : %s", monitor_pods_logs ? "true" : "false");
+    if(monitor_pods_logs)
+        ctx -> monitor_pods_logs = monitor_pods_logs;
     else
-        ctx -> monitor_pods_label = DEFAULT_MONITOR_PODS_LABEL;
+        ctx -> monitor_pods_logs = DEFAULT_MONITOR_PODS_LOGS;
 
     flb_free(file_path);
 
@@ -235,10 +234,6 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                 }
             }
         }
-        bool flag=true;
-        if(ctx-> monitor_pods_label){
-            flag = false;
-        }
 
         if ((!pod_name_populated) || ((pod_name_populated != NULL) && (pod_name_populated[0] == '\0'))) {
             msgpack_unpacked_destroy(&unpacked);
@@ -256,14 +251,18 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         int key_len;
         int val_len;
         bool pod_name_matched = false;
-        for (i = 1; ((i < ctx->jsmn_ret) && (flag)); i++) {
+        bool readJson=true;
+        if(ctx-> monitor_pods_logs){
+            readJson = false;
+            new_fields_to_add = new_fields_to_add + 2;
+        }
+        for (i = 1; ((i < ctx->jsmn_ret) && (readJson)); i++) {
             t = &ctx->jsmn_tokens[i];
             if (t->type != JSMN_STRING) {
                 continue;
             }
 
             if (t->start == -1 || t->end == -1 || (t->start == 0 && t->end == 0)){
-                flb_free(t);
                 break;
             }
             key = ctx-> json_buf + t->start;
@@ -319,9 +318,6 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             }
 
         }
-        if (ctx-> monitor_pods_label){
-            new_fields_to_add = new_fields_to_add + 2;
-        }
         msgpack_pack_map(&packer, map_num + new_fields_to_add);
         for (i = 0 ; i<strlen(snappyflow_labels_configured_key_store); i++)
         {
@@ -334,7 +330,7 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                 flb_free(snappyflow_labels_configured_key_store[i]);
             }
         }
-        if(ctx-> monitor_pods_label){
+        if(ctx-> monitor_pods_logs){
 
             msgpack_pack_str(&packer,strlen(ctx-> projname_labe1));
             msgpack_pack_str_body(&packer, ctx-> projname_labe1, strlen(ctx-> projname_labe1));
