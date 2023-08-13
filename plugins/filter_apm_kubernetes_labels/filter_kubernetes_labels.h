@@ -17,7 +17,7 @@
 #define EXCLUDE_CONTAINER_LABEL "snappyflow/exclude-containers-log"
 #define POD_NAME_IDENT_KEY "pod_name"
 
-#define DEFAULT_MONITOR_PODS_LOGS false
+#define DEFAULT_MONITOR_ALL_POD_LOGS false
 
 #define POD_NAME_IDENT_KEY_LEN 8
 #define DEFAULT_PROJECTNAME_LABEL_LEN 22
@@ -45,6 +45,6 @@ struct kubernetes_labels_ctx {
     char* appname;
     char* projname_labe1;
     char* projname;
-    bool monitor_pods_logs;
+    bool monitor_all_pod_logs;
     struct flb_filter_instance *ins;
 };

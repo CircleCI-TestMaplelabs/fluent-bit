@@ -60,7 +60,7 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     ret = stat(file_path, &st);
     if (ret == -1) {
         flb_errno();
-        flb_info("cannot open credentials file");
+        flb_info("cannot open mapping file");
         return -1;
     }
 
@@ -74,7 +74,7 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
 
     ret = jsmn_parse(&parser, data_in, st.st_size, tokens, tok_size);
     if (ret <= 0) {
-        flb_error("invalid JSON file:");
+        flb_error("invalid JSON file");
         flb_free(data_in);
         flb_free(tokens);
         return -1;
@@ -90,6 +90,20 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     ctx-> jsmn_ret = ret;
     ctx-> jsmn_tokens = tokens;
     ctx-> json_buf = data_in;
+    
+    const char* env_var_monitor_all_pods = getenv(MONITOR_ALL_PODS);
+
+    if (env_var_monitor_all_pods != NULL) {
+        int boolean_value = atoi(env_var_monitor_all_pods);
+        if (boolean_value != 0) {
+            ctx -> monitor_all_pod_logs = true;
+        } else {
+            ctx -> monitor_all_pod_logs = false;
+        }
+    } else {
+        ctx -> monitor_all_pod_logs = DEFAULT_MONITOR_ALL_POD_LOGS;
+    }
+
 
     char* proj_name_label = getenv(SFAPM_PROJECTNAME_LABEL);
     if(proj_name_label)
@@ -116,15 +130,7 @@ static int configure(struct kubernetes_labels_ctx *ctx, struct flb_filter_instan
     else
         ctx -> appname = DEFAULT_APPNAME;
     
-    bool monitor_pods_logs = getenv(MONITOR_ALL_PODS);
-    // printf("set monitor pods flag to : %s", monitor_pods_logs ? "true" : "false");
-    if(monitor_pods_logs)
-        ctx -> monitor_pods_logs = monitor_pods_logs;
-    else
-        ctx -> monitor_pods_logs = DEFAULT_MONITOR_PODS_LOGS;
-
     flb_free(file_path);
-
     return 0;
 }
 
@@ -191,6 +197,8 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
 
         int snappyflow_labels_configured_directly_tracker = 0;
 
+        int is_project_label_present_in_record = -1;
+        int is_app_label_present_in_record = -1;
         char *snappyflow_labels_configured_key_store[6];
         char *snappyflow_labels_configured_val_store[6];
         int snappyflow_labels_configured_index_store[6];
@@ -214,9 +222,7 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             if (old_record_key->type == MSGPACK_OBJECT_STR)
             {
                 
-                if ((!strncasecmp(old_record_key->via.str.ptr, ctx -> projname_labe1, strlen(ctx -> projname_labe1))) || 
-                    (!strncasecmp(old_record_key->via.str.ptr, ctx -> appname_labe1, strlen(ctx -> appname_labe1))) ||
-                    (!strncasecmp(old_record_key->via.str.ptr, COMPONENT_NAME_LABEL, COMPONENT_NAME_LABEL_LEN)) ||
+                if ((!strncasecmp(old_record_key->via.str.ptr, COMPONENT_NAME_LABEL, COMPONENT_NAME_LABEL_LEN)) ||
                     (!strncasecmp(old_record_key->via.str.ptr, UA_PARSER_LABEL, UA_PARSER_LABEL_LEN)) ||
                     (!strncasecmp(old_record_key->via.str.ptr, GEO_INFO_LABEL, GEO_INFO_LABEL_LEN)) ||
                     (!strncasecmp(old_record_key->via.str.ptr, EXCLUDE_CONTAINER_LABEL, EXCLUDE_CONTAINER_LABEL_LEN)))
@@ -227,6 +233,29 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                     snappyflow_labels_configured_directly_tracker = snappyflow_labels_configured_directly_tracker + 1;
                     continue;
                 }
+                if (!strncasecmp(old_record_key->via.str.ptr, ctx -> projname_labe1, strlen(ctx -> projname_labe1)))
+                {
+                    if (!ctx-> monitor_all_pod_logs) {
+                        snappyflow_labels_configured_key_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(old_record_key->via.str.ptr, old_record_key->via.str.size);
+                        snappyflow_labels_configured_val_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
+                        snappyflow_labels_configured_index_store[snappyflow_labels_configured_directly_tracker] = i;
+                        snappyflow_labels_configured_directly_tracker = snappyflow_labels_configured_directly_tracker + 1;
+                    } 
+                    is_project_label_present_in_record = 1;
+                    continue;
+                }
+                if (!strncasecmp(old_record_key->via.str.ptr, ctx -> appname_labe1, strlen(ctx -> appname_labe1)))
+                {
+                    if (!ctx-> monitor_all_pod_logs) {
+                        snappyflow_labels_configured_key_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(old_record_key->via.str.ptr, old_record_key->via.str.size);
+                        snappyflow_labels_configured_val_store[snappyflow_labels_configured_directly_tracker] = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
+                        snappyflow_labels_configured_index_store[snappyflow_labels_configured_directly_tracker] = i;
+                        snappyflow_labels_configured_directly_tracker = snappyflow_labels_configured_directly_tracker + 1;
+                    } 
+                    is_app_label_present_in_record = 1;
+                    continue;
+                }
+
                 if (!strncasecmp(old_record_key->via.str.ptr, POD_NAME_IDENT_KEY, POD_NAME_IDENT_KEY_LEN))
                 {
                     pod_name_populated = flb_strndup(old_record_value->via.str.ptr, old_record_value->via.str.size);
@@ -238,8 +267,9 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         if ((!pod_name_populated) || ((pod_name_populated != NULL) && (pod_name_populated[0] == '\0'))) {
             msgpack_unpacked_destroy(&unpacked);
             msgpack_sbuffer_destroy(&sbuffer);
-            flb_free(pod_name_populated);
-            // flb_error("Pod name not available in log record");
+            if (pod_name_populated != NULL) {
+               flb_free(pod_name_populated);
+            }
             return FLB_FILTER_NOTOUCH;
         }
         int key_store_iter;
@@ -251,12 +281,18 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         int key_len;
         int val_len;
         bool pod_name_matched = false;
-        bool readJson=true;
-        if(ctx-> monitor_pods_logs){
-            readJson = false;
-            new_fields_to_add = new_fields_to_add + 2;
-        }
-        for (i = 1; ((i < ctx->jsmn_ret) && (readJson)); i++) {
+        if(ctx-> monitor_all_pod_logs){
+            if (is_project_label_present_in_record == -1)
+            {
+                new_fields_to_add++;
+            }
+            if (is_app_label_present_in_record == -1)
+            {
+                new_fields_to_add++;
+            }
+        } 
+        
+        for (i = 1; ((i < ctx->jsmn_ret)); i++) {
             t = &ctx->jsmn_tokens[i];
             if (t->type != JSMN_STRING) {
                 continue;
@@ -271,13 +307,13 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             i++;
             t = &ctx->jsmn_tokens[i];
             if (t->type == JSMN_OBJECT) {
-                if (!strncasecmp(key, pod_name_populated, strlen(pod_name_populated)))
-                {
-                    pod_name_matched = true;
-                }
                 if (pod_name_matched) 
                 {
                     break;
+                }
+                if (!strncasecmp(key, pod_name_populated, strlen(pod_name_populated)))
+                {
+                    pod_name_matched = true;
                 }
                 continue;
             }
@@ -285,10 +321,15 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             {
                 continue;
             }
+            if (((!strncasecmp(key, ctx -> projname_labe1, strlen(ctx -> projname_labe1))) || 
+                    (!strncasecmp(key, ctx -> appname_labe1, strlen(ctx -> appname_labe1))) ) && (ctx-> monitor_all_pod_logs))
+            {
+                continue;
+            }
             val = ctx-> json_buf + t->start;
             val_len = (t->end - t->start);
             bool new_label_identified = true;
-            for (key_store_iter=0; key_store_iter < strlen(snappyflow_labels_configured_key_store); key_store_iter++)
+            for (key_store_iter=0; key_store_iter < snappyflow_labels_configured_directly_tracker ; key_store_iter++)
             {
 
                 if ((snappyflow_labels_configured_key_store[key_store_iter]!=NULL) && (!strncasecmp(key, snappyflow_labels_configured_key_store[key_store_iter], key_len)))
@@ -318,8 +359,9 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
             }
 
         }
+        
         msgpack_pack_map(&packer, map_num + new_fields_to_add);
-        for (i = 0 ; i<strlen(snappyflow_labels_configured_key_store); i++)
+        for (i = 0 ; i<6; i++)
         {
             if (snappyflow_labels_configured_key_store[i]!=NULL) {   
                 msgpack_pack_str(&packer, strlen(snappyflow_labels_configured_key_store[i]));
@@ -330,8 +372,9 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
                 flb_free(snappyflow_labels_configured_key_store[i]);
             }
         }
-        if(ctx-> monitor_pods_logs){
 
+        if (ctx-> monitor_all_pod_logs)
+        {
             msgpack_pack_str(&packer,strlen(ctx-> projname_labe1));
             msgpack_pack_str_body(&packer, ctx-> projname_labe1, strlen(ctx-> projname_labe1));
             msgpack_pack_str(&packer, strlen(ctx-> projname));
@@ -347,6 +390,16 @@ static int cb_modifier_filter_apm_kubernetes_labels(const void *data, size_t byt
         int iter;
         for (i = 0; i < map_num; i++)
         {
+            old_record_key = &(kv + i)->key;
+            
+            if (old_record_key->type == MSGPACK_OBJECT_STR)
+            {
+                if (((!strncasecmp(old_record_key->via.str.ptr, ctx -> projname_labe1, strlen(ctx -> projname_labe1))) || 
+                    (!strncasecmp(old_record_key->via.str.ptr, ctx -> appname_labe1, strlen(ctx -> appname_labe1))) ) && (ctx-> monitor_all_pod_logs))
+                {
+                    continue;
+                }
+            }
             bool data_to_append = true;
             for (iter = 0 ; iter<new_fields_starting_index; iter++)
             {
@@ -379,8 +432,10 @@ static int cb_modifier_exit_apm_kubernetes_labels(void *data, struct flb_config 
     struct kubernetes_labels_ctx *ctx = data;
     if (ctx != NULL)
     {
-        flb_free(ctx->jsmn_tokens);
-        flb_free(ctx->json_buf);
+        if (ctx->jsmn_tokens !=NULL)
+            flb_free(ctx->jsmn_tokens);
+        if (ctx->json_buf !=NULL)
+            flb_free(ctx->json_buf);
         flb_free(ctx);
         ctx = NULL;
     }
