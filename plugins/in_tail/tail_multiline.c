@@ -351,27 +351,26 @@ int flb_tail_mult_process_content(time_t now,
         /* The line was processed, break the loop and buffer the data */
         break;
     }
-
-    /*Initiate buffers if no prev lines are avail*/
-    if (file->source_multi_log_size == 0)
-    {
-        /* Re-initiate buffers */
-        msgpack_sbuffer_init(&file->mult_sbuf_for_source_log);
-        msgpack_packer_init(&file->mult_pck_for_source_log, &file->mult_sbuf_for_source_log, msgpack_sbuffer_write);
-    }
-    msgpack_pack_map(&file->mult_pck_for_source_log, 1);
-    msgpack_pack_str(&file->mult_pck_for_source_log, strlen(SOURCE_LOG_KEY));
-    msgpack_pack_str_body(&file->mult_pck_for_source_log, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
-    msgpack_pack_str(&file->mult_pck_for_source_log, len);
-    msgpack_pack_str_body(&file->mult_pck_for_source_log,buf, len);
-    file->source_multi_log_size = file->source_multi_log_size + len;
-
     if (!mult_parser) {
         /*
          * If no parser was found means the string log must be appended
          * to the last structured field.
-         */
+        */
         if (file->mult_firstline == FLB_TRUE && file->mult_firstline_append == FLB_TRUE) {
+            /*Initiate buffers if no prev lines are avail*/
+            if (file->source_multi_log_size == 0)
+            {
+                /* Re-initiate buffers */
+                msgpack_sbuffer_init(&file->mult_sbuf_for_source_log);
+                msgpack_packer_init(&file->mult_pck_for_source_log, &file->mult_sbuf_for_source_log, msgpack_sbuffer_write);
+            }
+            msgpack_pack_map(&file->mult_pck_for_source_log, 1);
+            msgpack_pack_str(&file->mult_pck_for_source_log, strlen(SOURCE_LOG_KEY));
+            msgpack_pack_str_body(&file->mult_pck_for_source_log, SOURCE_LOG_KEY, strlen(SOURCE_LOG_KEY));
+            msgpack_pack_str(&file->mult_pck_for_source_log, len);
+            msgpack_pack_str_body(&file->mult_pck_for_source_log,buf, len);
+            file->source_multi_log_size = file->source_multi_log_size + len;
+
             flb_tail_mult_append_raw(buf, len, file, ctx);
         }
         else {
