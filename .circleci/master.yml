@@ -105,8 +105,18 @@ jobs:
           imagetag: "${IMAGETAG}"
           snappyflowversion: "${SFTAG}"
           gitbranch: <<pipeline.git.branch>>
-          components: 'sfagent sfagent-arm'                      
-  fluentBitBuild:
+          components: 'sfagent sfagent-arm'   
+  ### sfApmAgentCodeCheck: This job does static code check, 
+  ### lint and stores the result in artifact.
+  fluentBitCodeCheck:
+    executor: circlecienv
+    steps:
+      - checkout
+      - orbsdk/static_code_check:
+          directory: .
+      - store_artifacts:
+          path: fluentbit.txt                               
+  fluentBitBuildcentos7:
     executor: centos7
     steps:
       - checkout
@@ -130,20 +140,135 @@ jobs:
                     mkdir -p build
                     cd build && cmake ../
                     make     
-                    ls                                         
-  ### sfApmAgentCodeCheck: This job does static code check, 
-  ### lint and stores the result in artifact.
-  fluentBitCodeCheck:
-    executor: circlecienv
+                    ls  
+  fluentBitBuildcentos8:
+    executor: centos8
     steps:
       - checkout
-      - orbsdk/static_code_check:
-          directory: .
-      - store_artifacts:
-          path: fluentbit.txt                                                                                                                    
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - run: 
+          command: |
+                    yum update -y
+                    yum install make wget -y  
+                    yum groupinstall "Development Tools" -y
+                    yum install flex bison gcc g++ -y
+                    yum remove openssl -y
+                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
+                    tar xf cmake-3.2.2.tar.gz
+                    cd cmake-3.2.2
+                    ./configure
+                    make  
+                    make install
+                    cmake --version
+                    cd ..
+                    mkdir -p build
+                    cd build && cmake ../
+                    make     
+                    ls                                                           
+  fluentBitBuildubuntu14:
+    executor: ubuntu14
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - run: 
+          command: |
+                    apt update -y
+                    apt install make wget -y  
+                    apt install install build-essential -y
+                    apt install flex bison gcc g++ -y
+                    apt remove openssl -y
+                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
+                    tar xf cmake-3.2.2.tar.gz
+                    cd cmake-3.2.2
+                    ./configure
+                    make  
+                    make install
+                    cmake --version
+                    cd ..
+                    mkdir -p build
+                    cd build && cmake ../
+                    make     
+                    ls 
+  fluentBitBuildubuntu18:
+    executor: ubuntu18
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - run: 
+          command: |
+                    apt update -y
+                    apt install make wget -y  
+                    apt install install build-essential -y
+                    apt install flex bison gcc g++ -y
+                    apt remove openssl -y
+                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
+                    tar xf cmake-3.2.2.tar.gz
+                    cd cmake-3.2.2
+                    ./configure
+                    make  
+                    make install
+                    cmake --version
+                    cd ..
+                    mkdir -p build
+                    cd build && cmake ../
+                    make     
+                    ls 
+  fluentBitBuildubuntu20:
+    executor: ubuntu20
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - run: 
+          command: |
+                    apt update -y
+                    apt install make wget -y  
+                    apt install install build-essential -y
+                    apt install flex bison gcc g++ -y
+                    apt remove openssl -y
+                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
+                    tar xf cmake-3.2.2.tar.gz
+                    cd cmake-3.2.2
+                    ./configure
+                    make  
+                    make install
+                    cmake --version
+                    cd ..
+                    mkdir -p build
+                    cd build && cmake ../
+                    make     
+                    ls 
+  fluentBitBuildubuntu22:
+    executor: ubuntu22
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - run: 
+          command: |
+                    apt update -y
+                    apt install make wget -y  
+                    apt install install build-essential -y
+                    apt install flex bison gcc g++ -y
+                    apt remove openssl -y
+                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
+                    tar xf cmake-3.2.2.tar.gz
+                    cd cmake-3.2.2
+                    ./configure
+                    make  
+                    make install
+                    cmake --version
+                    cd ..
+                    mkdir -p build
+                    cd build && cmake ../
+                    make     
+                    ls                                                                                                                                                                           
 ### Pipeline Workflows
 workflows:   
-  fluentBit:
+  fluentBitcentos7:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
     jobs:   
@@ -171,7 +296,167 @@ workflows:
           approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
           requires:
             - Waiting_For_Approval_For_Docker_Build              
-      - fluentBitBuild:
+      - fluentBitBuildcentos7:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters    
+  fluentBitcentos8:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuildcentos8:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters 
+  fluentBitubuntu14:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuildubuntu14:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters 
+  fluentBitubuntu18:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuildubuntu18:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters
+  fluentBitubuntu20:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuildubuntu20:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters  
+  fluentBitubuntu22:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuildubuntu22:
           name: fluentBit_Build
           context: Build_Env_Vars
           filters: *filters                  
