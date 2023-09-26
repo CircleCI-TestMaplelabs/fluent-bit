@@ -36,7 +36,10 @@ executors:
       - image: ubuntu:18.04 
   ubuntu20:
     docker:
-      - image: ubuntu:20.04                               
+      - image: ubuntu:20.04  
+  ubuntu22:
+    docker:
+      - image: ubuntu:22.04                                   
   ubuntumachineimage:
     machine:
       image: ubuntu-2204:2022.04.2
@@ -121,7 +124,7 @@ jobs:
                     ./configure
                     make  
                     cd ../
-                    ls
+                    ls bin
                     mkdir -p build
                     cd build && bin/cmake ../
                     make     
