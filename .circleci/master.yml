@@ -123,7 +123,7 @@ jobs:
                     cd ../
                     ls
                     mkdir -p build
-                    cd build && cmake3 ../
+                    cd build && cmake-3.2.2/bin/cmake ../
                     make     
                     ls                                         
   ### sfApmAgentCodeCheck: This job does static code check, 
