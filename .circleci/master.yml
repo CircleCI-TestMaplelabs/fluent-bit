@@ -27,7 +27,16 @@ executors:
       - image: centos:centos7  
   centos8:
     docker:
-      - image: centos:centos8        
+      - image: centos:centos8  
+  ubuntu14:
+    docker:
+      - image: ubuntu:14.04 
+  ubuntu18:
+    docker:
+      - image: ubuntu:18.04 
+  ubuntu20:
+    docker:
+      - image: ubuntu:20.04                               
   ubuntumachineimage:
     machine:
       image: ubuntu-2204:2022.04.2
@@ -110,7 +119,11 @@ jobs:
                     tar xf cmake-3.2.2.tar.gz
                     cd cmake-3.2.2
                     ./configure
-                    make                            
+                    make  
+                    mkdir -p build
+                    cd build && cmake3 ../
+                    make     
+                    ls                                         
   ### sfApmAgentCodeCheck: This job does static code check, 
   ### lint and stores the result in artifact.
   fluentBitCodeCheck:
