@@ -149,6 +149,8 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
+                    dnf clean all
+                    dnf update
                     yum update -y
                     yum install make wget -y  
                     yum groupinstall "Development Tools" -y
