@@ -1,0 +1,312 @@
+version: 2.1
+
+### Import required orbs
+orbs:
+  maven: circleci/maven@1.2.0
+  orbsdk: snappyflow/orbsdk@1.9.60
+  vulnerability-checker: whitesource/vulnerability-checker@19.10.1
+
+### Filters for branch and tags
+filters: &filters
+  tags:
+    only: /.*/
+
+### Custom job executor
+executors:
+  circlecienv:
+    docker:
+      - image: snappyflowml/circlecienv:v2.0.0
+        auth:
+          username: "${DOCKERUSER}"
+          password: $DOCKERPASSWORD
+  pluginsenv:
+    docker:
+      - image: snappyflowml/pluginsenv:v1
+  armubuntumachineimage:
+    machine:
+      image: ubuntu-2004:2022.04.1   
+    resource_class: arm.medium 
+  ubuntumachineimage:
+    machine:
+      image: ubuntu-2204:2022.04.2
+
+### Pipeline parameters
+parameters:
+  run-sfApmAgent-job:
+    type: boolean
+    default: false   
+  tag-gen-command:
+    type: string
+    default: |
+              function parse_yaml {
+                local prefix=$2
+                local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
+                sed -ne "s|^\($s\):|\1|" \
+                      -e "s|^\($s\)\($w\)$s:$s[\"']\(.*\)[\"']$s\$|\1$fs\2$fs\3|p" \
+                      -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p"  $1 |
+                awk -F$fs '{
+                    indent = length($1)/2;
+                    vname[indent] = $2;
+                    for (i in vname) {if (i > indent) {delete vname[i]}}
+                    if (length($3) > 0) {
+                      vn=""; for (i=0; i<indent; i++) {vn=(vn)(vname[i])("_")}
+                      printf("%s%s%s=\"%s\"\n", "'$prefix'",vn, $2, $3);
+                    }
+                }'
+              }
+              ls
+              eval $(parse_yaml "version.yaml")
+              echo "${AppVersion}"
+              GIT_BRANCH=<<pipeline.git.branch>>
+              VERSION=$(echo ${AppVersion} | sed 's/\./-/g')
+              a=${GIT_BRANCH}-${VERSION}
+              SFAGENT_VERSION=$(echo ${AppVersion})
+              echo "SFAGENT_VERSION=$SFAGENT_VERSION" >> $BASH_ENV
+              TAG=$(echo -n "v"$VERSION | tr -c -s '[:alnum:]' '.')
+              echo $TAG
+              echo "IMAGETAG=$TAG" >> $BASH_ENV
+              b=$(echo ${SF_VERSION} | sed 's/\./-/g')
+              echo "SFTAG=$b" >> $BASH_ENV              
+###Pipeline Jobs
+jobs:
+  ### updateBaseRevision: This job updates the BASE_REVISION env in context
+  updateBaseRevision:
+    executor: ubuntumachineimage
+    steps:
+      - run:
+           command: |
+             BRANCH=<<pipeline.git.branch>>
+             GIT_BRANCH=$(echo -n $BRANCH | tr -c -s '[:alnum:]' '_')
+             curl -XPOST https://circleci.com/api/v2/project/gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/envvar --header "Content-Type: application/json" --header "Circle-Token: $CIRCLE_CI_TOKEN" --data '{"name":"'"${GIT_BRANCH}"'", "value": "'"${CIRCLE_SHA1}"'"}'
+  reTagSubcomponents:
+    executor: ubuntumachineimage
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - orbsdk/retag_subcomponents:
+          dockeruser: "${DOCKERUSER}"
+          dockerpassword: "${DOCKERPASSWORD}"
+          dockerrepository: "${DOCKERUSER}"
+          cluster: production
+          imagetag: "${IMAGETAG}"
+          snappyflowversion: "${SFTAG}"
+          gitbranch: <<pipeline.git.branch>>
+          components: 'sfagent sfagent-arm'
+  sfApmAgentBuildArm:
+    executor: armubuntumachineimage
+    steps:
+      - checkout
+      - run:
+           command: |
+             sudo apt update
+             sudo apt install gcc-aarch64-linux-gnu
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - orbsdk/buildsfagent_docker_prod:
+          dockeruser: "${DOCKERUSER}"
+          dockerpassword: "${DOCKERPASSWORD}"
+          imagename: sfagent-arm
+          imagetag: "${IMAGETAG}"
+          dockerrepository: "${DOCKERUSER}"
+          appdirectory: .
+          gitbranch: <<pipeline.git.branch>> 
+          snappyflowversion: "${SFTAG}"
+  sfApmAgentBuildAmd:
+    executor: ubuntumachineimage
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - orbsdk/buildsfagent_docker_prod:
+          dockeruser: "${DOCKERUSER}"
+          dockerpassword: "${DOCKERPASSWORD}"
+          imagename: sfagent
+          imagetag: "${IMAGETAG}"
+          dockerrepository: "${DOCKERUSER}"
+          appdirectory: .
+          gitbranch: <<pipeline.git.branch>>
+          snappyflowversion: "${SFTAG}"
+  ### sfApmAgentCodeCheck: This job does static code check, 
+  ### lint and stores the result in artifact.       
+  sfApmAgentCodeCheck:
+    executor: circlecienv
+    steps:
+      - checkout
+      - orbsdk/static_code_check:
+          directory: .
+      - store_artifacts:
+          path: sf-apm-agent.txt  
+  sfApmAgentBuildBinary:
+    executor: pluginsenv
+    environment:
+      CGO_ENABLED: "1"
+      GO111MODULE: "on"
+    steps:
+      - checkout  # Check out the repository 
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>      
+      - run:
+          name: go version
+          command: go version  
+      - run:
+          command: |
+            go clean -r -cache
+            go clean -modcache            
+            go mod tidy -v
+            go mod download  
+            mkdir sfagent_binaries  
+      - run:
+          name: Build for x86_64
+          command: | 
+            VERSION=$SFAGENT_VERSION
+            COMMIT=$CIRCLE_SHA1
+            DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')           
+            GOOS=linux GOARCH=amd64 go build -v -ldflags="-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -gcflags="all=-trimpath=$PWD" -asmflags="all=-trimpath=$PWD" -o sfagent_${VERSION}_linux_x86_64 cmd/vm/sfagent.go               
+      - run:
+          name: Build for i386
+          command: |   
+            VERSION=$SFAGENT_VERSION
+            COMMIT=$CIRCLE_SHA1
+            DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')                    
+            GOOS=linux GOARCH=386 go build -v -ldflags="-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -gcflags="all=-trimpath=$PWD" -asmflags="all=-trimpath=$PWD" -o sfagent_${VERSION}_linux_i386 cmd/vm/sfagent.go  
+      - run:
+          name: Build for arm64
+          command: | 
+            VERSION=$SFAGENT_VERSION
+            COMMIT=$CIRCLE_SHA1
+            DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')           
+            apt-get update && apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu         
+            GOOS=linux GOARCH=arm64 GOARM=7 CC=aarch64-linux-gnu-gcc go build -v -ldflags="-s -w -X main.version=$VERSION -X main.commit=$COMMIT -X main.date=$DATE" -gcflags="all=-trimpath=$PWD" -asmflags="all=-trimpath=$PWD" -o sfagent_${VERSION}_linux_arm64 cmd/vm/sfagent.go                    
+      - run:
+          name: Build and Create Archives
+          command: |           
+            BINARY="sfagent"
+            VERSION=$SFAGENT_VERSION
+
+            # Function to create archives
+            create_archive() {
+              local OS="$1"
+              local ARCH_NAME="$2"
+              local ARCHIVE_NAME="${BINARY}_${VERSION}_${OS}_${ARCH_NAME}.tar.gz"
+              mv ${BINARY}_${VERSION}_${OS}_${ARCH_NAME} ${BINARY}
+              # Create the archive
+              tar -czvf "${ARCHIVE_NAME}" \
+                mappings/*.yaml \
+                mappings/*.json \
+                config.yaml.sample \
+                scripts/* \
+                certs/* \
+                jolokia.jar \
+                normalization/* \
+                statsd/*rules.txt \
+                ${BINARY} \
+                || true
+              rm ${BINARY}
+            cp $ARCHIVE_NAME sfagent_binaries/    
+            }
+
+            # Loop through the architectures and create archives
+            for ARCH in "i386" "x86_64" "arm64"; do
+              create_archive "linux" "$ARCH"
+            done     
+
+            ls   
+      - run:
+          name: Generate checksums
+          command: |
+            cd sfagent_binaries
+            sha256sum * > checksums.txt            
+      - store_artifacts:
+          path: sfagent_binaries   
+      - persist_to_workspace:
+          root: .
+          paths:
+            - sfagent_binaries                                                                      
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>          
+      - run:
+          name: "Publish Release for Release Branch on GitHub"
+          command: |
+            VERSION=$SFAGENT_VERSION
+            echo $VERSION
+            ghr -t ${GITTOKEN} -u sahana-bannigol-ml -r apm-agent -c master -delete "v"${VERSION} sfagent_binaries                                                                                                           
+
+### Pipeline Workflows
+workflows:   
+  sfApmAgentDockerImage:
+    when:
+      equal: [true, << pipeline.parameters.run-sfApmAgent-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - sfApmAgentCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Pradeep-G-ML srivathsa-mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - sfApmAgentBuildArm:
+          name: sfApmAgent_Build_Arm
+          context: Build_Env_Vars
+          filters: *filters
+          requires:
+            - Verifying_Approver_For_Docker_Build
+      - sfApmAgentBuildAmd:
+          name: sfApmAgent_Build_Amd
+          context: Build_Env_Vars
+          filters: *filters
+          requires:
+            - Verifying_Approver_For_Docker_Build                     
+  sfApmAgentBinary:
+    when:
+      equal: [true, << pipeline.parameters.run-sfApmAgent-job >>]
+    jobs:                                  
+      - sfApmAgentBuildBinary:
+          name: sfApmAgent_Build_Binary
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Release_Binary
+          filters: *filters
+          type: approval
+          requires: 
+            - sfApmAgent_Build_Binary
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Release_Binary  
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Pradeep-G-ML srivathsa-mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Release_Binary           
+      - publish-github-release:
+          name: Publish_Github_Release
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            - Verifying_Approver_For_Release_Binary  

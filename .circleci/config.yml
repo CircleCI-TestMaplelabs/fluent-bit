@@ -1,0 +1,121 @@
+version: 2.1
+
+### this allows you to use CircleCI's dynamic configuration feature
+setup: true
+
+### the path-filtering orb is required to continue a pipeline based on
+### the path of an updated fileset
+orbs:
+  path-filtering: circleci/path-filtering@0.1.1
+  orbsdk: snappyflow/orbsdk@1.9.58
+
+### This allows tags and ignore branches 
+filters: &filters
+  tags:
+    only: /.*/
+  branches:
+    ignore: /.*/
+
+### Pipeline parameters 
+parameters:
+  set:
+    type: boolean
+    default: true
+  module-change:
+    type: string
+    default: |
+            .* run-fluentBit-job true 
+    
+workflows:
+  Release_Work_Flow:
+    when:
+      and:
+        - not:
+            matches:
+              pattern: ".*?\\bML\\b.*?"
+              value: <<pipeline.project.git_url>>
+        - matches:
+            pattern: ".*?\\brelease\\b.*?"
+            value: <<pipeline.git.branch>>        
+    jobs:
+      - orbsdk/preliminary_check:
+          context: Build_Env_Vars
+          name: Preliminary_Check
+          base-revision: <<pipeline.git.branch>>
+      - orbsdk/filter:
+          context: Build_Env_Vars
+          name: Check_Updated_Components
+          base-revision: <<pipeline.git.branch>>
+          mapping: << pipeline.parameters.module-change >>
+          config-path: .circleci/release.yml
+          requires:
+            - Preliminary_Check
+  Master_Work_Flow:
+    when:
+      and:
+        - not:
+            matches:
+              pattern: ".*?\\bML\\b.*?"
+              value: <<pipeline.project.git_url>>     
+        - matches:
+            pattern: ".*?\\bmaster\\b.*?"
+            value: <<pipeline.git.branch>>            
+    jobs:
+      - orbsdk/preliminary_check:
+          context: Build_Env_Vars
+          name: Preliminary_Check
+          base-revision: <<pipeline.git.branch>>
+      - orbsdk/filter:
+          context: Build_Env_Vars
+          name: Check_Updated_Components
+          base-revision: <<pipeline.git.branch>>
+          mapping: << pipeline.parameters.module-change >>
+          config-path: .circleci/master.yml
+          requires:
+            - Preliminary_Check
+  Common_Flow:
+    when:
+      and:
+        - not:
+            matches:
+              pattern: ".*?\\bML\\b.*?"
+              value: <<pipeline.project.git_url>>
+        - not:        
+            matches:
+              pattern: ".*?\\bmaster\\b.*?"
+              value: <<pipeline.git.branch>>    
+        - not:
+            matches:
+                pattern: ".*?\\brelease\\b.*?"
+                value: <<pipeline.git.branch>>                                                  
+    jobs:
+      - orbsdk/preliminary_check:
+          context: Build_Env_Vars
+          name: Preliminary_Check
+          base-revision: <<pipeline.git.branch>>
+      - orbsdk/filter:
+          context: Build_Env_Vars
+          name: Check_Updated_Components
+          base-revision: <<pipeline.git.branch>> 
+          mapping: << pipeline.parameters.module-change >>
+          config-path: .circleci/common.yml
+          requires:
+            - Preliminary_Check         
+  Dev_Work_Flow:
+    when:
+      matches:
+        pattern: ".*?\\bML\\b.*?"
+        value: <<pipeline.project.git_url>>
+    jobs:
+      - orbsdk/preliminary_check:
+          context: Build_Env_Vars
+          name: Preliminary_Check
+          base-revision: <<pipeline.git.branch>>
+      - orbsdk/filter:
+          context: Build_Env_Vars
+          name: Check_Updated_Components
+          base-revision: <<pipeline.git.branch>> 
+          mapping: << pipeline.parameters.module-change >>
+          config-path: .circleci/common.yml
+          requires:
+            - Preliminary_Check      

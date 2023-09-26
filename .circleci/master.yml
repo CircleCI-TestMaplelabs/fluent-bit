@@ -1,0 +1,143 @@
+version: 2.1
+
+### Import required orbs
+orbs:
+  maven: circleci/maven@1.2.0
+  orbsdk: snappyflow/orbsdk@1.9.58
+  vulnerability-checker: whitesource/vulnerability-checker@19.10.1
+
+### Filters for branch and tags
+filters: &filters
+  tags:
+    only: /.*/
+
+### Custom job executor
+executors:
+  circlecienv:
+    docker:
+      - image: snappyflowml/circlecienv:v2.0.0
+        auth:
+          username: "${DOCKERUSER}"
+          password: $DOCKERPASSWORD
+  pluginsenv:
+    docker:
+      - image: snappyflowml/pluginsenv:v1
+  centos7:
+    docker:
+      - image: centos:centos7    
+  ubuntumachineimage:
+    machine:
+      image: ubuntu-2204:2022.04.2
+
+### Pipeline parameters
+parameters:
+  run-fluentBit-job:
+    type: boolean
+    default: false   
+  tag-gen-command:
+    type: string
+    default: |
+              function parse_yaml {
+                local prefix=$2
+                local s='[[:space:]]*' w='[a-zA-Z0-9_]*' fs=$(echo @|tr @ '\034')
+                sed -ne "s|^\($s\):|\1|" \
+                      -e "s|^\($s\)\($w\)$s:$s[\"']\(.*\)[\"']$s\$|\1$fs\2$fs\3|p" \
+                      -e "s|^\($s\)\($w\)$s:$s\(.*\)$s\$|\1$fs\2$fs\3|p"  $1 |
+                awk -F$fs '{
+                    indent = length($1)/2;
+                    vname[indent] = $2;
+                    for (i in vname) {if (i > indent) {delete vname[i]}}
+                    if (length($3) > 0) {
+                      vn=""; for (i=0; i<indent; i++) {vn=(vn)(vname[i])("_")}
+                      printf("%s%s%s=\"%s\"\n", "'$prefix'",vn, $2, $3);
+                    }
+                }'
+              }
+              ls
+              eval $(parse_yaml "version.yaml")
+              echo "${AppVersion}"
+              GIT_BRANCH=<<pipeline.git.branch>>
+              VERSION=$(echo ${AppVersion} | sed 's/\./-/g')
+              a=${GIT_BRANCH}-${VERSION}
+              SFAGENT_VERSION=$(echo ${AppVersion})
+              echo "SFAGENT_VERSION=$SFAGENT_VERSION" >> $BASH_ENV
+              TAG=$(echo -n $a | tr -c -s '[:alnum:]' '-')
+              echo $TAG
+              echo "IMAGETAG=$TAG" >> $BASH_ENV  
+
+###Pipeline Jobs
+jobs:
+  ### updateBaseRevision: This job updates the BASE_REVISION env in context
+  updateBaseRevision:
+    executor: ubuntumachineimage
+    steps:
+      - run:
+           command: |
+             BRANCH=<<pipeline.git.branch>>
+             GIT_BRANCH=$(echo -n $BRANCH | tr -c -s '[:alnum:]' '_')
+             curl -XPOST https://circleci.com/api/v2/project/gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/envvar --header "Content-Type: application/json" --header "Circle-Token: $CIRCLE_CI_TOKEN" --data '{"name":"'"${GIT_BRANCH}"'", "value": "'"${CIRCLE_SHA1}"'"}'
+  reTagSubcomponents:
+    executor: ubuntumachineimage
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+      - orbsdk/retag_subcomponents:
+          dockeruser: "${DOCKERUSER}"
+          dockerpassword: "${DOCKERPASSWORD}"
+          dockerrepository: "${DOCKERUSER}"
+          cluster: non-production
+          imagetag: "${IMAGETAG}"
+          snappyflowversion: "${SFTAG}"
+          gitbranch: <<pipeline.git.branch>>
+          components: 'sfagent sfagent-arm'                      
+  fluentBitBuild:
+    executor: centos7
+    steps:
+      - checkout
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>
+  ### sfApmAgentCodeCheck: This job does static code check, 
+  ### lint and stores the result in artifact.
+  fluentBitCodeCheck:
+    executor: circlecienv
+    steps:
+      - checkout
+      - orbsdk/static_code_check:
+          directory: .
+      - store_artifacts:
+          path: fluentbit.txt                                                                                                                    
+### Pipeline Workflows
+workflows:   
+  fluentBit:
+    when:
+      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+    jobs:   
+      - vulnerability-checker/scan:
+          name: Check_Opensource_Vulnerabilities
+          context: Build_Env_Vars
+          filters: *filters
+          directory: .
+      - fluentBitCodeCheck:
+          name: Static_Code_Check
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval_For_Docker_Build
+          filters: *filters
+          type: approval
+          requires: 
+            - Static_Code_Check
+      - orbsdk/approver_verification:
+          name: Verifying_Approver_For_Docker_Build
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
+          requires:
+            - Waiting_For_Approval_For_Docker_Build              
+      - fluentBitBuild:
+          name: fluentBit_Build
+          context: Build_Env_Vars
+          filters: *filters                  
