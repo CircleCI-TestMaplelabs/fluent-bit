@@ -121,6 +121,7 @@ jobs:
                     ./configure
                     make  
                     mkdir -p build
+                    cmake --version
                     cd build && cmake3 ../
                     make     
                     ls                                         
