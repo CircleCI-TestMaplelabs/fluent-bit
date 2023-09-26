@@ -125,6 +125,7 @@ jobs:
                     make  
                     make install
                     cmake --version
+                    cd ..
                     mkdir -p build
                     cd build && cmake ../
                     make     
