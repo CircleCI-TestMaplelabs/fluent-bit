@@ -27,7 +27,7 @@ executors:
       - image: centos:centos7  
   centos8:
     docker:
-      - image: centos:centos8  
+      - image: centos:centos8.4.2105
   ubuntu14:
     docker:
       - image: ubuntu:14.04 
@@ -149,8 +149,6 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
-                    dnf clean all
-                    dnf update
                     yum update -y
                     yum install make wget -y  
                     yum groupinstall "Development Tools" -y
