@@ -24,7 +24,10 @@ executors:
       - image: snappyflowml/pluginsenv:v1
   centos7:
     docker:
-      - image: centos:centos7    
+      - image: centos:centos7  
+  centos8:
+    docker:
+      - image: centos:centos8        
   ubuntumachineimage:
     machine:
       image: ubuntu-2204:2022.04.2
@@ -101,6 +104,8 @@ jobs:
           command: |
                     yum update -y
                     yum install make wget -y  
+                    yum groupinstall "Development Tools" -y
+                    yum install flex bison -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
                     tar xf cmake-3.2.2.tar.gz
                     cd cmake-3.2.2
