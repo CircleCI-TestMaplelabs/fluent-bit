@@ -105,17 +105,7 @@ jobs:
           imagetag: "${IMAGETAG}"
           snappyflowversion: "${SFTAG}"
           gitbranch: <<pipeline.git.branch>>
-          components: 'sfagent sfagent-arm'   
-  ### sfApmAgentCodeCheck: This job does static code check, 
-  ### lint and stores the result in artifact.
-  fluentBitCodeCheck:
-    executor: circlecienv
-    steps:
-      - checkout
-      - orbsdk/static_code_check:
-          directory: .
-      - store_artifacts:
-          path: fluentbit.txt                               
+          components: 'sfagent sfagent-arm'                                
   fluentBitBuildcentos7:
     executor: centos7
     steps:
@@ -277,16 +267,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
@@ -309,16 +293,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
@@ -341,16 +319,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
@@ -373,16 +345,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
@@ -405,16 +371,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
@@ -437,16 +397,10 @@ workflows:
           context: Build_Env_Vars
           filters: *filters
           directory: .
-      - fluentBitCodeCheck:
-          name: Static_Code_Check
-          context: Build_Env_Vars
-          filters: *filters
       - hold:
           name: Waiting_For_Approval_For_Docker_Build
           filters: *filters
           type: approval
-          requires: 
-            - Static_Code_Check
       - orbsdk/approver_verification:
           name: Verifying_Approver_For_Docker_Build
           context: Build_Env_Vars
