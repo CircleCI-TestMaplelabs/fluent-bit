@@ -127,7 +127,7 @@ jobs:
                     make install
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls  
   fluentBitBuildcentos8:
@@ -151,7 +151,7 @@ jobs:
                     make install
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls                                                           
   fluentBitBuildubuntu14:
@@ -176,7 +176,7 @@ jobs:
 
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls 
   fluentBitBuildubuntu18:
@@ -200,7 +200,7 @@ jobs:
                     make install
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls 
   fluentBitBuildubuntu20:
@@ -224,7 +224,7 @@ jobs:
                     make install
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls 
   fluentBitBuildubuntu22:
@@ -248,7 +248,7 @@ jobs:
                     make install
                     cd ..
                     mkdir -p build
-                    cd build && cmake ../
+                    cd build && cmake ..
                     make     
                     ls                                                                                                                                                                           
 ### Pipeline Workflows
