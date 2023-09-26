@@ -176,7 +176,7 @@ jobs:
           command: |
                     apt update -y
                     apt install make wget -y  
-                    apt install install build-essential -y
+                    apt install build-essential -y
                     apt install flex bison gcc g++ -y
                     apt remove openssl -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
@@ -201,7 +201,7 @@ jobs:
           command: |
                     apt update -y
                     apt install make wget -y  
-                    apt install install build-essential -y
+                    apt install build-essential -y
                     apt install flex bison gcc g++ -y
                     apt remove openssl -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
@@ -226,7 +226,7 @@ jobs:
           command: |
                     apt update -y
                     apt install make wget -y  
-                    apt install install build-essential -y
+                    apt install build-essential -y
                     apt install flex bison gcc g++ -y
                     apt remove openssl -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
@@ -251,7 +251,7 @@ jobs:
           command: |
                     apt update -y
                     apt install make wget -y  
-                    apt install install build-essential -y
+                    apt install build-essential -y
                     apt install flex bison gcc g++ -y
                     apt remove openssl -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
