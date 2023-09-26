@@ -126,6 +126,7 @@ jobs:
                     make  
                     make install
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
@@ -150,6 +151,7 @@ jobs:
                     make  
                     make install
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
@@ -173,8 +175,8 @@ jobs:
                     ./configure
                     make  
                     make install
-
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
@@ -199,6 +201,7 @@ jobs:
                     make  
                     make install
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
@@ -223,6 +226,7 @@ jobs:
                     make  
                     make install
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
@@ -247,6 +251,7 @@ jobs:
                     make  
                     make install
                     cd ..
+                    rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build && cmake ..
                     make     
