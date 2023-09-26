@@ -125,7 +125,6 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
@@ -150,7 +149,6 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
@@ -175,7 +173,7 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
+
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
@@ -200,7 +198,6 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
@@ -225,7 +222,6 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
@@ -250,7 +246,6 @@ jobs:
                     ./configure
                     make  
                     make install
-                    cmake --version
                     cd ..
                     mkdir -p build
                     cd build && cmake ../
