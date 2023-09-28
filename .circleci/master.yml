@@ -185,9 +185,12 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    cmake ..
                     make     
                     ls 
+      - store_artifacts:
+          path: build                     
   fluentBitBuildubuntu18:
     executor: ubuntu18
     steps:
@@ -210,9 +213,12 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    cmake ..
                     make     
                     ls 
+      - store_artifacts:
+          path: build                     
   fluentBitBuildubuntu20:
     executor: ubuntu20
     steps:
@@ -235,9 +241,12 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    cmake ..
                     make     
-                    ls 
+                    ls
+      - store_artifacts:
+          path: build                      
   fluentBitBuildubuntu22:
     executor: ubuntu22
     steps:
@@ -260,9 +269,12 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    cmake ..
                     make     
-                    ls                                                                                                                                                                           
+                    ls 
+      - store_artifacts:
+          path: build                                                                                                                                                                                               
 ### Pipeline Workflows
 workflows:   
   fluentBitcentos7:
