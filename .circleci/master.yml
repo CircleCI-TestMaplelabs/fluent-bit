@@ -140,10 +140,11 @@ jobs:
       - run: 
           command: |
                     yum update -y
-                    yum install make wget -y  
+                    wget -q http://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm && rpm -ivh epel-release-latest-7.noarch.rpm
+                    yum install rpm-build curl ca-certificates make wget postgresql-libs postgresql-devel postgresql-server postgresql libyaml-devel -y  
                     yum groupinstall "Development Tools" -y
-                    yum install systemd-devel flex bison gcc g++ cmake cmkae3 ncurses-devel libarchive-devel -y
-                    yum remove openssl -y
+                    yum install systemd-devel flex bison gcc g++ cmake cmake3 ncurses-devel libarchive-devel -y
+                    yum install cyrus-sasl-lib cyrus-sasl-devel openssl openss-libs openssl-devel -y
                     mkdir -p build
                     cd build && cmake3 -DCMAKE_INSTALL_PREFIX=/opt/fluent-bit/ -DCMAKE_INSTALL_SYSCONFDIR=/etc/  -DFLB_RELEASE=On -DFLB_TRACE=On  -DFLB_TESTS_INTERNAL=On -DFLB_TESTS_RUNTIME=On   -DFLB_SQLDB=On -DFLB_HTTP_SERVER=On  -DFLB_OUT_KAFKA=On  -DFLB_JEMALLOC=On  -DFLB_CHUNK_TRACE=On  -DFLB_OUT_PGSQL=On ..
                     make     
