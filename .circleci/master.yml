@@ -128,9 +128,13 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    echo "Hello, world!" > output.txt
+                    cmake ..
                     make     
                     ls  
+      - store_artifacts:
+          path: build                     
   fluentBitBuildcentos8:
     executor: centos8
     steps:
@@ -153,9 +157,12 @@ jobs:
                     cd ..
                     rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build
+                    cmake ..
                     make     
-                    ls                                                           
+                    ls   
+      - store_artifacts:
+          path: build                                                                             
   fluentBitBuildubuntu14:
     executor: ubuntu14
     steps:
