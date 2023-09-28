@@ -142,18 +142,10 @@ jobs:
                     yum update -y
                     yum install make wget -y  
                     yum groupinstall "Development Tools" -y
-                    yum install flex bison gcc g++ ncurses-devel libarchive-devel -y
+                    yum install flex bison gcc g++ cmake cmkae3 ncurses-devel libarchive-devel -y
                     yum remove openssl -y
-                    wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
-                    tar xf cmake-3.2.2.tar.gz
-                    cd cmake-3.2.2
-                    ./configure
-                    make  
-                    make install
-                    cd ..
-                    rm -rf cmake-3.2.2*
                     mkdir -p build
-                    cd build && cmake ..
+                    cd build && cmake3 -DCMAKE_INSTALL_PREFIX=/opt/fluent-bit/ -DCMAKE_INSTALL_SYSCONFDIR=/etc/  -DFLB_RELEASE=On -DFLB_TRACE=On  -DFLB_TESTS_INTERNAL=On -DFLB_TESTS_RUNTIME=On   -DFLB_SQLDB=On -DFLB_HTTP_SERVER=On  -DFLB_OUT_KAFKA=On  -DFLB_JEMALLOC=On  -DFLB_CHUNK_TRACE=On  -DFLB_OUT_PGSQL=On ..
                     make     
                     ls                                                           
   fluentBitBuildubuntu14:
