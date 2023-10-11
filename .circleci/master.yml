@@ -138,7 +138,7 @@ jobs:
                     make     
                     ls  
       - store_artifacts:
-          path: build/bin                   
+          path: build/bin/fluent-bit                  
   fluentBitBuildcentos8:
     executor: centos8
     steps:
@@ -166,7 +166,7 @@ jobs:
                     make     
                     ls   
       - store_artifacts:
-          path: build/bin                                                                            
+          path: build/bin/fluent-bit                                                                           
   fluentBitBuildubuntu14:
     executor: ubuntu14
     steps:
@@ -199,7 +199,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build/bin                     
+          path: build/bin/fluent-bit                   
   fluentBitBuildubuntu18:
     executor: ubuntu18
     steps:
@@ -225,7 +225,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build/bin                     
+          path: build/bin/fluent-bit                    
   fluentBitBuildubuntu20:
     executor: ubuntu20
     steps:
@@ -258,7 +258,7 @@ jobs:
                     make     
                     ls
       - store_artifacts:
-          path: build/bin                     
+          path: build/bin/fluent-bit                    
   fluentBitBuildubuntu22:
     executor: ubuntu22
     steps:
@@ -291,7 +291,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build/bin                                                                                                                                                                                              
+          path: build/bin/fluent-bit                                                                                                                                                                                            
 ### Pipeline Workflows
 workflows:   
   fluentBitcentos7:
