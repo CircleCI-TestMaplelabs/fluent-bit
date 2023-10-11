@@ -134,7 +134,7 @@ jobs:
                     make     
                     ls  
       - store_artifacts:
-          path: build                     
+          path: build/bin                   
   fluentBitBuildcentos8:
     executor: centos8
     steps:
@@ -162,7 +162,7 @@ jobs:
                     make     
                     ls   
       - store_artifacts:
-          path: build                                                                             
+          path: build/bin                                                                            
   fluentBitBuildubuntu14:
     executor: ubuntu14
     steps:
@@ -190,7 +190,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build                     
+          path: build/bin                     
   fluentBitBuildubuntu18:
     executor: ubuntu18
     steps:
@@ -218,7 +218,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build                     
+          path: build/bin                     
   fluentBitBuildubuntu20:
     executor: ubuntu20
     steps:
@@ -246,7 +246,7 @@ jobs:
                     make     
                     ls
       - store_artifacts:
-          path: build                      
+          path: build/bin                     
   fluentBitBuildubuntu22:
     executor: ubuntu22
     steps:
@@ -274,7 +274,7 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build                                                                                                                                                                                               
+          path: build/bin                                                                                                                                                                                              
 ### Pipeline Workflows
 workflows:   
   fluentBitcentos7:
