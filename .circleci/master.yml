@@ -118,6 +118,7 @@ jobs:
                     yum remove openssl -y
                     yum install make wget -y  
                     yum install flex bison gcc g++ -y
+                    yum groupinstall "Development Tools" -y
                     wget http://www.cmake.org/files/v3.2/cmake-3.2.2.tar.gz
                     tar -xf cmake-3.2.2.tar.gz
                     cd cmake-3.2.2
