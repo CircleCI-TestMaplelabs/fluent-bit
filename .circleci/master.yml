@@ -195,7 +195,7 @@ jobs:
                     rm -rf cmake-3.2.2*
                     mkdir -p build
                     cd build
-                    cmake ../
+                    cmake -DFLB_DEBUG=On -DFLB_TRACE=Off -DFLB_JEMALLOC=On -DFLB_TLS=On -DFLB_SHARED_LIB=Off -DFLB_EXAMPLES=Off -DFLB_HTTP_SERVER=On -DFLB_IN_SYSTEMD=On -DFLB_OUT_KAFKA=On ../
                     make     
                     ls 
       - store_artifacts:
