@@ -201,7 +201,7 @@ jobs:
                     apt update -y
                     apt install make wget -y  
                     apt install build-essential -y
-                    apt install flex bison gcc g++ cmake libssl1.0-dev libasl-dev libsasl2-dev pkg-config libsystemd-dev zlib1g-dev ca-certificates -y --no-install-recommends
+                    apt install flex bison gcc g++ cmake libssl1.0-dev libasl-dev libsasl2-dev pkg-config libsystemd-dev zlib1g-dev -y --no-install-recommends
                     apt remove openssl -y
                     mkdir -p build
                     cd build
