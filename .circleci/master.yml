@@ -325,7 +325,6 @@ jobs:
     docker:
       - image: cibuilds/github:0.10
     steps:
-      - checkout
       - attach_workspace:
           at: .
       - run: 
@@ -333,8 +332,9 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
+            ls
             mkdir fluentbitBinaries
-            cp -r /root/project/build/bin/ fluentbitBinaries
+            cp -r build/bin/ fluentbitBinaries
             VERSION=$SFAGENT_VERSION
             echo $VERSION
             ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" fluentbitBinaries                                                                                                                                                                                              
