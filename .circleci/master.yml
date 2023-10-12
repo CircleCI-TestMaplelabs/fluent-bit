@@ -338,45 +338,45 @@ jobs:
             ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" build/bin                                                                                                                                                                                              
 ### Pipeline Workflows
 workflows:   
-  fluentBitcentos7:
-    when:
-      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
-    jobs:   
-      - vulnerability-checker/scan:
-          name: Check_Opensource_Vulnerabilities
-          context: Build_Env_Vars
-          filters: *filters
-          directory: .            
-      - fluentBitBuildcentos7:
-          name: fluentBit_Build
-          context: Build_Env_Vars
-          filters: *filters    
-  fluentBitcentos8:
-    when:
-      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
-    jobs:   
-      - vulnerability-checker/scan:
-          name: Check_Opensource_Vulnerabilities
-          context: Build_Env_Vars
-          filters: *filters
-          directory: .            
-      - fluentBitBuildcentos8:
-          name: fluentBit_Build
-          context: Build_Env_Vars
-          filters: *filters 
-  fluentBitubuntu14:
-    when:
-      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
-    jobs:   
-      - vulnerability-checker/scan:
-          name: Check_Opensource_Vulnerabilities
-          context: Build_Env_Vars
-          filters: *filters
-          directory: .             
-      - fluentBitBuildubuntu14:
-          name: fluentBit_Build
-          context: Build_Env_Vars
-          filters: *filters 
+###  fluentBitcentos7:
+###    when:
+###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+###    jobs:   
+###      - vulnerability-checker/scan:
+###          name: Check_Opensource_Vulnerabilities
+###          context: Build_Env_Vars
+###          filters: *filters
+###          directory: .            
+###      - fluentBitBuildcentos7:
+###          name: fluentBit_Build
+###          context: Build_Env_Vars
+###          filters: *filters    
+###  fluentBitcentos8:
+###    when:
+###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+###    jobs:   
+###      - vulnerability-checker/scan:
+###          name: Check_Opensource_Vulnerabilities
+###          context: Build_Env_Vars
+###          filters: *filters
+###          directory: .            
+###      - fluentBitBuildcentos8:
+###          name: fluentBit_Build
+###          context: Build_Env_Vars
+###          filters: *filters 
+###  fluentBitubuntu14:
+###    when:
+###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+###    jobs:   
+###      - vulnerability-checker/scan:
+###          name: Check_Opensource_Vulnerabilities
+###          context: Build_Env_Vars
+###          filters: *filters
+###          directory: .             
+###      - fluentBitBuildubuntu14:
+###          name: fluentBit_Build
+###          context: Build_Env_Vars
+###          filters: *filters 
   fluentBitubuntu18:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -403,19 +403,19 @@ workflows:
           name: fluentBit_Build
           context: Build_Env_Vars
           filters: *filters            
-  fluentBitubuntu22:
-    when:
-      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
-    jobs:   
-      - vulnerability-checker/scan:
-          name: Check_Opensource_Vulnerabilities
-          context: Build_Env_Vars
-          filters: *filters
-          directory: .            
-      - fluentBitBuildubuntu22:
-          name: fluentBit_Build
-          context: Build_Env_Vars
-          filters: *filters  
+###  fluentBitubuntu22:
+###    when:
+###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+###    jobs:   
+###      - vulnerability-checker/scan:
+###          name: Check_Opensource_Vulnerabilities
+###          context: Build_Env_Vars
+###          filters: *filters
+###          directory: .            
+###      - fluentBitBuildubuntu22:
+###          name: fluentBit_Build
+###          context: Build_Env_Vars
+###          filters: *filters  
   release:
     jobs:
       - wait:
