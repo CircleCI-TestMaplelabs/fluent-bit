@@ -332,9 +332,8 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-            ls /root/project
+            cp build/bin
             mkdir fluentbitBinaries
-            ls
             cp -r build/bin/ fluentbitBinaries
             VERSION=$SFAGENT_VERSION
             echo $VERSION
@@ -380,7 +379,7 @@ workflows:
 ###          name: fluentBit_Build
 ###          context: Build_Env_Vars
 ###          filters: *filters 
-  fluentBitubuntu18:
+  fluentBitBuild:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
     jobs:   
@@ -390,22 +389,45 @@ workflows:
           filters: *filters
           directory: .            
       - fluentBitBuildubuntu18:
-          name: fluentBit_Build
+          name: fluentBit_Build_Ubuntu18
           context: Build_Env_Vars
-          filters: *filters        
-  fluentBitubuntu20:
-    when:
-      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
-    jobs:   
-      - vulnerability-checker/scan:
-          name: Check_Opensource_Vulnerabilities
+          filters: *filters 
+      - fluentBitBuildubuntu20:
+          name: fluentBit_Build_Ubuntu20
           context: Build_Env_Vars
           filters: *filters
-          directory: .           
-      - fluentBitBuildubuntu20:
-          name: fluentBit_Build
+      - hold:
+          name: Waiting_For_Approval
+          filters: *filters
+          type: approval
+          requires: 
+            - fluentBit_Build_Ubuntu18
+            - fluentBit_Build_Ubuntu20
+      - orbsdk/approver_verification:
+          name: Verifying_Approver
           context: Build_Env_Vars
-          filters: *filters            
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML'
+          requires:
+            - Waiting_For_Approval 
+      - publish-github-release:
+          name: Publish_Github_Release
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            -  Verifying_Approver                           
+###  fluentBitubuntu20:
+###    when:
+###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
+###    jobs:   
+###      - vulnerability-checker/scan:
+###          name: Check_Opensource_Vulnerabilities
+###          context: Build_Env_Vars
+###          filters: *filters
+###          directory: .           
+           
 ###  fluentBitubuntu22:
 ###    when:
 ###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -419,30 +441,30 @@ workflows:
 ###          name: fluentBit_Build
 ###          context: Build_Env_Vars
 ###          filters: *filters  
-  release:
-    jobs:
-      - wait:
-          context: Build_Env_Vars
-          filters: *filters
-      - hold:
-          name: Waiting_For_Approval
-          filters: *filters
-          type: approval
-          requires: 
-            - wait
-      - orbsdk/approver_verification:
-          name: Verifying_Approver
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML'
-          requires:
-            - wait
-            - Waiting_For_Approval 
-      - publish-github-release:
-          name: Publish_Github_Release
-          context: Build_Env_Vars
-          filters: *filters    
-          requires:
-            -  Verifying_Approver                                    
+###  release:
+###    jobs:
+###      - wait:
+###          context: Build_Env_Vars
+###          filters: *filters
+###      - hold:
+###          name: Waiting_For_Approval
+###          filters: *filters
+###          type: approval
+###          requires: 
+###            - wait
+###      - orbsdk/approver_verification:
+###          name: Verifying_Approver
+###          context: Build_Env_Vars
+###          filters: *filters
+###          workflowid: ${CIRCLE_WORKFLOW_ID}
+###          ccitoken: ${CIRCLE_CI_TOKEN}
+###          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML'
+###          requires:
+###            - wait
+###            - Waiting_For_Approval 
+###      - publish-github-release:
+###          name: Publish_Github_Release
+###          context: Build_Env_Vars
+###          filters: *filters    
+###          requires:
+###            -  Verifying_Approver                                    
