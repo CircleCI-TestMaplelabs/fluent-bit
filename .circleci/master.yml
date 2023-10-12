@@ -124,14 +124,16 @@ jobs:
                     mkdir -p build
                     cd build
                     cmake ../
-                    make     
+                    make
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-centos7     
                     ls  
       - store_artifacts:
-          path: build/bin/fluent-bit
+          path: build/bin/fluent-bit-centos7
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit                              
+            - build/bin/fluent-bit-centos7                    
   fluentBitBuildcentos8:
     executor: centos8
     steps:
@@ -156,14 +158,16 @@ jobs:
                     mkdir -p build
                     cd build
                     cmake ../
-                    make     
+                    make
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-centos8                         
                     ls   
       - store_artifacts:
-          path: build/bin/fluent-bit 
+          path: build/bin/fluent-bit-centos8
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit                                                                                     
+            - build/bin/fluent-bit-centos8                                                                                     
   fluentBitBuildubuntu14:
     executor: ubuntu14
     steps:
@@ -182,13 +186,15 @@ jobs:
                     cd build
                     cmake ../
                     make     
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-ubuntu14                    
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit  
+          path: build/bin/fluent-bit-ubuntu14 
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit                            
+            - build/bin/fluent-bit-ubuntu14                 
   fluentBitBuildubuntu18:
     executor: ubuntu18
     steps:
@@ -206,14 +212,16 @@ jobs:
                     mkdir -p build
                     cd build
                     cmake ../
-                    make     
+                    make 
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-ubuntu18                        
                     ls 
       - store_artifacts:
-          path: build/bin/fluent-bit 
+          path: build/bin/fluent-bit-ubuntu18
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit                              
+            - build/bin/fluent-bit-ubuntu18                   
   fluentBitBuildubuntu20:
     executor: ubuntu20
     steps:
@@ -231,14 +239,16 @@ jobs:
                     mkdir -p build
                     cd build
                     cmake ../
-                    make     
+                    make 
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-ubuntu20                        
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit 
+          path: build/bin/fluent-bit-ubuntu20
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit                              
+            - build/bin/fluent-bit-ubuntu20                             
   fluentBitBuildubuntu22:
     executor: ubuntu22
     steps:
@@ -257,14 +267,16 @@ jobs:
                     mkdir -p build
                     cd build
                     cmake ../
-                    make     
+                    make 
+                    cd ..
+                    mv build/bin/fluent-bit build/bin/fluent-bit-ubuntu22                        
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit
+          path: build/bin/fluent-bit-ubuntu22 
       - persist_to_workspace:
           root: .
           paths:
-            - build/bin/fluent-bit 
+            - build/bin/fluent-bit-ubuntu22 
   publish-github-release:
     docker:
       - image: cibuilds/github:0.10
