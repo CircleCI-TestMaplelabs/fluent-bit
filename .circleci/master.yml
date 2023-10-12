@@ -333,9 +333,11 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
+            mkdir fluentbitBinaries
+            cp -r /root/project/build/bin/ fluentbitBinaries
             VERSION=$SFAGENT_VERSION
             echo $VERSION
-            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" build/bin                                                                                                                                                                                              
+            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" fluentbitBinaries                                                                                                                                                                                              
 ### Pipeline Workflows
 workflows:   
 ###  fluentBitcentos7:
