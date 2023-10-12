@@ -332,6 +332,7 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
+            ls /root/project
             mkdir fluentbitBinaries
             ls
             cp -r build/bin/ fluentbitBinaries
