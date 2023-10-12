@@ -163,21 +163,17 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
-                    export FLB_MAJOR=1
-                    export FLB_MINOR=7
-                    export FLB_PATCH=5
-                    export FLB_VERSION=1.7.5
                     export DEBIAN_FRONTEND=noninteractive          
                     apt update -y
                     apt install make wget -y  
                     apt install build-essential -y
-                    apt install cmake gcc g++ flex bison zlib1g-dev libmaxminddb-dev libtool automake -y --no-install-recommends
+                    apt install gcc g++ cmake flex bison zlib1g-dev libmaxminddb-dev libtool automake -y --no-install-recommends
                     apt remove openssl -y
                     mkdir -p build
                     cd build
-                    cmake -DFLB_DEBUG=On -DFLB_TRACE=Off -DFLB_JEMALLOC=On -DFLB_TLS=On -DFLB_SHARED_LIB=Off -DFLB_EXAMPLES=Off -DFLB_HTTP_SERVER=On -DFLB_IN_SYSTEMD=On -DFLB_OUT_KAFKA=On ../
+                    cmake ../
                     make     
-                    ls 
+                    ls
       - store_artifacts:
           path: build/bin/fluent-bit                   
   fluentBitBuildubuntu18:
@@ -188,12 +184,7 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
-                    export FLB_MAJOR=1
-                    export FLB_MINOR=7
-                    export FLB_PATCH=5
-                    export FLB_VERSION=1.7.5
                     export DEBIAN_FRONTEND=noninteractive
-
                     apt update -y
                     apt install make wget -y  
                     apt install build-essential -y
@@ -214,10 +205,6 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
-                    export FLB_MAJOR=1
-                    export FLB_MINOR=7
-                    export FLB_PATCH=5
-                    export FLB_VERSION=1.7.5
                     export DEBIAN_FRONTEND=noninteractive          
                     apt update -y
                     apt install make wget -y  
@@ -226,7 +213,7 @@ jobs:
                     apt remove openssl -y
                     mkdir -p build
                     cd build
-                    cmake -DFLB_DEBUG=On -DFLB_TRACE=Off -DFLB_JEMALLOC=On -DFLB_TLS=On -DFLB_SHARED_LIB=Off -DFLB_EXAMPLES=Off -DFLB_HTTP_SERVER=On -DFLB_IN_SYSTEMD=On -DFLB_OUT_KAFKA=On ../
+                    cmake ../
                     make     
                     ls
       - store_artifacts:
@@ -239,21 +226,17 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>
       - run: 
           command: |
-                    export FLB_MAJOR=1
-                    export FLB_MINOR=7
-                    export FLB_PATCH=5
-                    export FLB_VERSION=1.7.5
                     export DEBIAN_FRONTEND=noninteractive          
                     apt update -y
-                    apt install make wget  -y
-                    apt install build-essential -y  
+                    apt install make wget -y  
+                    apt install build-essential -y
                     apt install gcc g++ cmake flex bison zlib1g-dev libmaxminddb-dev libtool automake -y --no-install-recommends
                     apt remove openssl -y
                     mkdir -p build
                     cd build
-                    cmake -DFLB_DEBUG=On -DFLB_TRACE=Off -DFLB_JEMALLOC=On -DFLB_TLS=On -DFLB_SHARED_LIB=Off -DFLB_EXAMPLES=Off -DFLB_HTTP_SERVER=On -DFLB_IN_SYSTEMD=On -DFLB_OUT_KAFKA=On ../
+                    cmake ../
                     make     
-                    ls 
+                    ls
       - store_artifacts:
           path: build/bin/fluent-bit                                                                                                                                                                                            
 ### Pipeline Workflows
