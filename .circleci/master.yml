@@ -116,6 +116,7 @@ jobs:
           command: |
                     export DEBIAN_FRONTEND=noninteractive           
                     yum update -y
+                    yum upgrade -y
                     yum remove openssl -y
                     yum install make wget -y  
                     yum install cmake gcc glibc-devel gcc-c++ flex bison zlib-devel libcurl-devel libmaxminddb-devel libtool automake -y
@@ -165,6 +166,7 @@ jobs:
           command: |
                     export DEBIAN_FRONTEND=noninteractive          
                     apt-get update -y
+                    apt-get upgrade -y
                     apt-get install make wget -y 
                     apt-get install build-essential cmake gcc g++ flex bison zlib1g-dev libcurl4-openssl-dev libmaxminddb-dev libtool automake
                     apt-get remove openssl -y
@@ -227,6 +229,7 @@ jobs:
           command: |
                     export DEBIAN_FRONTEND=noninteractive          
                     apt update -y
+                    apt upgrade -y
                     apt install make wget -y  
                     apt install build-essential -y
                     apt install gcc g++ cmake flex bison zlib1g-dev libmaxminddb-dev libtool automake -y --no-install-recommends
