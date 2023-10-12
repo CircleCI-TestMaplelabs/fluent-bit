@@ -91,6 +91,50 @@ jobs:
              BRANCH=<<pipeline.git.branch>>
              GIT_BRANCH=$(echo -n $BRANCH | tr -c -s '[:alnum:]' '_')
              curl -XPOST https://circleci.com/api/v2/project/gh/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/envvar --header "Content-Type: application/json" --header "Circle-Token: $CIRCLE_CI_TOKEN" --data '{"name":"'"${GIT_BRANCH}"'", "value": "'"${CIRCLE_SHA1}"'"}'
+  ### wait: This job block the execution of release release helm and 
+  ### docker tags until other subcomponent workflows are completed.
+  wait:
+    executor: ubuntumachineimage
+    steps:
+      - run:
+           command: |
+             PIPELINE_ID=<< pipeline.id >>
+             while :
+             do
+               curl -XGET https://circleci.com/api/v2/pipeline/$PIPELINE_ID/workflow --header "Circle-Token: $CIRCLE_CI_TOKEN"
+               # Fetch Statuses
+               STATUSES=$(curl -XGET https://circleci.com/api/v2/pipeline/$PIPELINE_ID/workflow --header "Circle-Token: $CIRCLE_CI_TOKEN" | jq -r ".items[] | .status")
+
+               # Fetch Names
+               NAMES=$(curl -XGET https://circleci.com/api/v2/pipeline/$PIPELINE_ID/workflow --header "Circle-Token: $CIRCLE_CI_TOKEN" | jq -r ".items[] | .name")
+
+               declare -a WORKFLOW_STATUSES=($STATUSES)
+               declare -a WORKFLOW_NAMES=($NAMES)
+               declare -A WORKFLOW_ARR
+               DONE=1
+               # Constructiing Workflow array
+               for key in "${!WORKFLOW_NAMES[@]}"; do
+                 WORKFLOW_ARR[${WORKFLOW_NAMES[$key]}]=${WORKFLOW_STATUSES[$key]}
+               done
+               for NAME in "${!WORKFLOW_ARR[@]}"; do
+                 echo "Key: $NAME"
+                 echo "Value: ${WORKFLOW_ARR[$NAME]}"
+                 if [[ ${WORKFLOW_ARR[$NAME]} == failed ]]; then
+                   exit 1
+                 fi
+                 if [[ ${WORKFLOW_ARR[$NAME]} == running ]] || [[ ${WORKFLOW_ARR[$NAME]} == on_hold ]]; then
+                   if [[ $NAME != release ]]; then
+                     DONE=0
+                   fi 
+                 fi
+               done
+               echo $DONE
+               if [[ $DONE != 0 ]]; then
+                 echo "Breaking loop"
+                 break
+               fi
+               sleep 30
+             done
   reTagSubcomponents:
     executor: ubuntumachineimage
     steps:
@@ -302,20 +346,7 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .            
       - fluentBitBuildcentos7:
           name: fluentBit_Build
           context: Build_Env_Vars
@@ -328,20 +359,7 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .            
       - fluentBitBuildcentos8:
           name: fluentBit_Build
           context: Build_Env_Vars
@@ -354,20 +372,7 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .             
       - fluentBitBuildubuntu14:
           name: fluentBit_Build
           context: Build_Env_Vars
@@ -380,30 +385,11 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .            
       - fluentBitBuildubuntu18:
           name: fluentBit_Build
           context: Build_Env_Vars
-          filters: *filters
-      - publish-github-release:
-          name: Publish_Github_Release
-          context: Build_Env_Vars
-          filters: *filters    
-          requires:
-            -  fluentBit_Build          
+          filters: *filters        
   fluentBitubuntu20:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -412,30 +398,11 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .           
       - fluentBitBuildubuntu20:
           name: fluentBit_Build
           context: Build_Env_Vars
-          filters: *filters
-      - publish-github-release:
-          name: Publish_Github_Release
-          context: Build_Env_Vars
-          filters: *filters    
-          requires:
-            -  fluentBit_Build             
+          filters: *filters            
   fluentBitubuntu22:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -444,22 +411,35 @@ workflows:
           name: Check_Opensource_Vulnerabilities
           context: Build_Env_Vars
           filters: *filters
-          directory: .
-      - hold:
-          name: Waiting_For_Approval_For_Docker_Build
-          filters: *filters
-          type: approval
-      - orbsdk/approver_verification:
-          name: Verifying_Approver_For_Docker_Build
-          context: Build_Env_Vars
-          filters: *filters
-          workflowid: ${CIRCLE_WORKFLOW_ID}
-          ccitoken: ${CIRCLE_CI_TOKEN}
-          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML Deepa-Martin-ML'
-          requires:
-            - Waiting_For_Approval_For_Docker_Build              
+          directory: .            
       - fluentBitBuildubuntu22:
           name: fluentBit_Build
           context: Build_Env_Vars
           filters: *filters  
-                        
+  release:
+    jobs:
+      - wait:
+          context: Build_Env_Vars
+          filters: *filters
+      - hold:
+          name: Waiting_For_Approval
+          filters: *filters
+          type: approval
+          requires: 
+            - wait
+      - orbsdk/approver_verification:
+          name: Verifying_Approver
+          context: Build_Env_Vars
+          filters: *filters
+          workflowid: ${CIRCLE_WORKFLOW_ID}
+          ccitoken: ${CIRCLE_CI_TOKEN}
+          approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML'
+          requires:
+            - wait
+            - Waiting_For_Approval 
+      - publish-github-release:
+          name: Publish_Github_Release
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            -  Verifying_Approver                                    
