@@ -175,7 +175,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-centos7
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-centos7                    
   fluentBitBuildcentos8:
@@ -209,7 +209,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-centos8
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-centos8                                                                                     
   fluentBitBuildubuntu14:
@@ -236,7 +236,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-ubuntu14 
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-ubuntu14                 
   fluentBitBuildubuntu18:
@@ -263,7 +263,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-ubuntu18
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-ubuntu18                   
   fluentBitBuildubuntu20:
@@ -290,7 +290,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-ubuntu20
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-ubuntu20                             
   fluentBitBuildubuntu22:
@@ -318,7 +318,7 @@ jobs:
       - store_artifacts:
           path: build/bin/fluent-bit-ubuntu22 
       - persist_to_workspace:
-          root: /workspace
+          root: .
           paths:
             - build/bin/fluent-bit-ubuntu22 
   publish-github-release:
@@ -326,16 +326,15 @@ jobs:
       - image: cibuilds/github:0.10
     steps:
       - attach_workspace:
-          at: /workspace
+          at: .
       - run: 
           command: << pipeline.parameters.tag-gen-command >>        
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-            ls
+            ls /root/project
             mkdir fluentbitBinaries
             ls
-            cp -r /workspace/build/bin/ fluentbitBinaries
             cp -r build/bin/ fluentbitBinaries
             VERSION=$SFAGENT_VERSION
             echo $VERSION
