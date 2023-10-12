@@ -127,7 +127,11 @@ jobs:
                     make     
                     ls  
       - store_artifacts:
-          path: build/bin/fluent-bit                  
+          path: build/bin/fluent-bit
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit                              
   fluentBitBuildcentos8:
     executor: centos8
     steps:
@@ -155,7 +159,11 @@ jobs:
                     make     
                     ls   
       - store_artifacts:
-          path: build/bin/fluent-bit                                                                           
+          path: build/bin/fluent-bit 
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit                                                                                     
   fluentBitBuildubuntu14:
     executor: ubuntu14
     steps:
@@ -176,7 +184,11 @@ jobs:
                     make     
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit                   
+          path: build/bin/fluent-bit  
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit                            
   fluentBitBuildubuntu18:
     executor: ubuntu18
     steps:
@@ -197,7 +209,11 @@ jobs:
                     make     
                     ls 
       - store_artifacts:
-          path: build/bin/fluent-bit                    
+          path: build/bin/fluent-bit 
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit                              
   fluentBitBuildubuntu20:
     executor: ubuntu20
     steps:
@@ -218,7 +234,11 @@ jobs:
                     make     
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit                    
+          path: build/bin/fluent-bit 
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit                              
   fluentBitBuildubuntu22:
     executor: ubuntu22
     steps:
@@ -240,7 +260,26 @@ jobs:
                     make     
                     ls
       - store_artifacts:
-          path: build/bin/fluent-bit                                                                                                                                                                                            
+          path: build/bin/fluent-bit
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/bin/fluent-bit 
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>        
+      - run:
+          name: "Publish PreRelease for Master Branch on GitHub"
+          command: |
+            VERSION=$SFAGENT_VERSION
+            echo $VERSION
+            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" build/bin                                                                                                                                                                                              
 ### Pipeline Workflows
 workflows:   
   fluentBitcentos7:
@@ -347,6 +386,12 @@ workflows:
           name: fluentBit_Build
           context: Build_Env_Vars
           filters: *filters
+      - publish-github-release:
+          name: Publish_Github_Release
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            -  fluentBit_Build          
   fluentBitubuntu20:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -372,7 +417,13 @@ workflows:
       - fluentBitBuildubuntu20:
           name: fluentBit_Build
           context: Build_Env_Vars
-          filters: *filters  
+          filters: *filters
+      - publish-github-release:
+          name: Publish_Github_Release
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            -  fluentBit_Build             
   fluentBitubuntu22:
     when:
       equal: [true, << pipeline.parameters.run-fluentBit-job >>]
@@ -398,4 +449,5 @@ workflows:
       - fluentBitBuildubuntu22:
           name: fluentBit_Build
           context: Build_Env_Vars
-          filters: *filters                  
+          filters: *filters  
+                        
