@@ -332,8 +332,8 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-            ls
             mkdir fluentbitBinaries
+            ls
             cp -r build/bin/ fluentbitBinaries
             VERSION=$SFAGENT_VERSION
             echo $VERSION
