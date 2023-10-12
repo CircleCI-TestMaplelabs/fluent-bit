@@ -118,11 +118,11 @@ jobs:
                     yum update -y
                     yum remove openssl -y
                     yum install make wget -y  
-                    yum install cmake make gcc glibc-devel gcc-c++ flex bison zlib-devel libcurl-devel libmaxminddb-devel libtool automake -y
+                    yum install cmake gcc glibc-devel gcc-c++ flex bison zlib-devel libcurl-devel libmaxminddb-devel libtool automake -y
                     yum groupinstall "Development Tools" -y
                     mkdir -p build
                     cd build
-                    cmake -DFLB_DEBUG=On -DFLB_TRACE=Off -DFLB_JEMALLOC=On -DFLB_TLS=On -DFLB_SHARED_LIB=Off -DFLB_EXAMPLES=Off -DFLB_HTTP_SERVER=On -DFLB_IN_SYSTEMD=On -DFLB_OUT_KAFKA=On ../
+                    cmake ../
                     make     
                     ls  
       - store_artifacts:
