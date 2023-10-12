@@ -417,7 +417,11 @@ workflows:
           context: Build_Env_Vars
           filters: *filters    
           requires:
-            -  Verifying_Approver                           
+            -  Verifying_Approver 
+      - updateBaseRevision:
+          context: Build_Env_Vars
+          requires:
+            - Publish_Github_Release                                       
 ###  fluentBitubuntu20:
 ###    when:
 ###      equal: [true, << pipeline.parameters.run-fluentBit-job >>]
