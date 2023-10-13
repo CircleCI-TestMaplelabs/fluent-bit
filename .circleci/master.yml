@@ -332,8 +332,7 @@ jobs:
           command: << pipeline.parameters.tag-gen-command >>        
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
-          command: |
-                    apt install curl wget -y 
+          command: | 
                     curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 \
                     | grep -w "browser_download_url"|grep "download/fluentbit" \
                     | head -n 1 \
