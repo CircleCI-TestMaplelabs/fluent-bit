@@ -341,7 +341,7 @@ jobs:
                         echo "Failed to fetch the latest release URL."
                         exit 1
                     fi
-          
+
                     # Check if fluentbit.tar.gz exists
                     if [ -f "fluentbit.tar.gz" ]; then
                         mkdir fluentbit
@@ -351,10 +351,10 @@ jobs:
                         rm fluentbit.tar.gz
                         cp ../build/bin/* .
                         tar -cvzf fluentbit.tar.gz .
-          
+
                         # Upload to GitHub using ghr
-                        ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit/fluentbit.tar.gz
-          
+                        ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.gz
+
                         echo "Successfully uploaded version v$VERSION-master."
                     else
                         echo "fluentbit.tar.gz does not exist."
