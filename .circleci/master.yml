@@ -450,14 +450,14 @@ workflows:
           context: Build_Env_Vars
           filters: *filters    
           requires:
-            -  Verifying_Approver 
-            -  Process_Fluentbit_Tar                 
+            -  Verifying_Approver                  
       - publish-github-release:
           name: Publish_Github_Release
           context: Build_Env_Vars
           filters: *filters    
           requires:
             -  Verifying_Approver 
+            -  Process_Fluentbit_Tar            
       - updateBaseRevision:
           context: Build_Env_Vars
           requires:
