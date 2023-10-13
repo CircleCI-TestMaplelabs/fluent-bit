@@ -333,6 +333,8 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
+            curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 | grep -w "browser_download_url"|grep "download/fluentbit" | head -n 1 | cut -d":" -f 2,3 | tr -d '"' | xargs wget -q
+            ls
             VERSION=$SFAGENT_VERSION
             echo $VERSION
             ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" build/bin                                                                                                                                                                                              
