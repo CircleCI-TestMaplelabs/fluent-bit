@@ -321,18 +321,13 @@ jobs:
           root: .
           paths:
             - build/bin/fluent-bit-ubuntu22 
-  publish-github-release:
-    docker:
-      - image: cibuilds/github:0.10
+  processFluentbitTar:
+    executor: ubuntumachineimage
     steps:
-      - checkout
       - attach_workspace:
-          at: .
-      - run: 
-          command: << pipeline.parameters.tag-gen-command >>        
+          at: .    
       - run:
-          name: "Publish PreRelease for Master Branch on GitHub"
-          command: | 
+           command: | 
                     curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 \
                     | grep -w "browser_download_url"|grep "download/fluentbit" \
                     | head -n 1 \
@@ -348,15 +343,27 @@ jobs:
                         rm fluentbit.tar.gz
                         cp ../build/bin/* .
                         tar -cvzf fluentbit.tar.gz .
-
-                        # Upload to GitHub using ghr
-                        ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.gz
-
-                        echo "Successfully uploaded version v$VERSION-master."
+                        ls
                     else
                         echo "fluentbit.tar.gz does not exist."
                         exit 1
-                    fi                                                                                                                                                                                            
+                    fi 
+  publish-github-release:
+    docker:
+      - image: cibuilds/github:0.10
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: 
+          command: << pipeline.parameters.tag-gen-command >>        
+      - run:
+          name: "Publish PreRelease for Master Branch on GitHub"
+          command: | 
+                    # Upload to GitHub using ghr
+                    ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.g
+                    echo "Successfully uploaded version v$VERSION-master."          
+                                                                                                                                                                                           
 ### Pipeline Workflows
 workflows:   
 ###  fluentBitcentos7:
@@ -431,6 +438,13 @@ workflows:
           approvers: 'Aman-Singh-ML Pradeep-G-ML Srivathsa-Mugalodi-ML Asraf-Khan-ML Sai-Devireddy-ML Nagarjuna-B-ML'
           requires:
             - Waiting_For_Approval 
+      - processFluentbitTar:
+          name: Process_Fluentbit_Tar
+          context: Build_Env_Vars
+          filters: *filters    
+          requires:
+            -  Verifying_Approver 
+            -  Process_Fluentbit_Tar                 
       - publish-github-release:
           name: Publish_Github_Release
           context: Build_Env_Vars
