@@ -328,7 +328,7 @@ jobs:
           at: .    
       - run:
            command: | 
-                    apt install curl wget -y
+                    sudo apt install curl wget -y
                     curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 \
                     | grep -w "browser_download_url"|grep "download/fluentbit" \
                     | head -n 1 \
