@@ -333,13 +333,13 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-                    latest_release_url=$(curl -sL "https://api.github.com/repos/snappyflow/apm-agent/releases/latest" | grep -w "browser_download_url" | grep "download/fluentbit" | cut -d":" -f 2,3 | tr -d '"')
-                    if [ -n "$latest_release_url" ]; then
-                        wget -q "$latest_release_url" -O fluentbit.tar.gz
-                    else
-                        echo "Failed to fetch the latest release URL."
-                        exit 1
-                    fi
+                    apt install curl wget -y 
+                    curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 \
+                    | grep -w "browser_download_url"|grep "download/fluentbit" \
+                    | head -n 1 \
+                    | cut -d":" -f 2,3 \
+                    | tr -d '"' \
+                    | xargs wget -q
 
                     if [ -f "fluentbit.tar.gz" ]; then
                         mkdir fluentbit
