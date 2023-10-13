@@ -333,17 +333,33 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-            mkdir -p fluentbit
-            cd fluentbit
-            curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 | grep -w "browser_download_url"|grep "download/fluentbit" | head -n 1 | cut -d":" -f 2,3 | tr -d '"' | xargs wget -q
-            ls
-            tar -zxvf fluentbit.tar.gz
-            rm fluentbit.tar.gz
-            cp ../build/bin/* .
-            tar -cvzf fluentbit.tar.gz .           
-            VERSION=$SFAGENT_VERSION
-            echo $VERSION
-            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" fluentbit/fluentbit.tar.gz                                                                                                                                                                                             
+# Download the latest release file
+          latest_release_url=$(curl -sL "https://api.github.com/repos/snappyflow/apm-agent/releases/latest" | grep -w "browser_download_url" | grep "download/fluentbit" | cut -d":" -f 2,3 | tr -d '"')
+          if [ -n "$latest_release_url" ]; then
+              wget -q "$latest_release_url" -O fluentbit.tar.gz
+          else
+              echo "Failed to fetch the latest release URL."
+              exit 1
+          fi
+
+          # Check if fluentbit.tar.gz exists
+          if [ -f "fluentbit.tar.gz" ]; then
+              mkdir fluentbit
+              cp fluentbit.tar.gz fluentbit/
+              cd fluentbit
+              tar -zxvf fluentbit.tar.gz
+              rm fluentbit.tar.gz
+              cp ../build/bin/* .
+              tar -cvzf fluentbit.tar.gz .
+
+              # Upload to GitHub using ghr
+              ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit/fluentbit.tar.gz
+
+              echo "Successfully uploaded version v$VERSION-master."
+          else
+              echo "fluentbit.tar.gz does not exist."
+              exit 1
+          fi                                                                                                                                                                                            
 ### Pipeline Workflows
 workflows:   
 ###  fluentBitcentos7:
