@@ -328,7 +328,6 @@ jobs:
           at: .    
       - run:
            command: | 
-                    sudo apt install curl wget -y
                     curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 \
                     | grep -w "browser_download_url"|grep "download/fluentbit" \
                     | head -n 1 \
@@ -370,6 +369,8 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: | 
+                    VERSION=$SFAGENT_VERSION
+                    echo $VERSION
                     # Upload to GitHub using ghr
                     ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.gz
                     echo "Successfully uploaded version v$VERSION-master."          
