@@ -344,8 +344,8 @@ jobs:
                         rm fluent-bit
                         ls
                         cp  -r ../build/bin/* .
-                        tar -cvzf fluentbit.tar.gz .  
-                        cp fluentbit.tar.gz ../
+                        cd ..
+                        tar -cvzf fluentbit.tar.gz  -C fluentbit .  
                         ls
                     else
                         echo "fluentbit.tar.gz does not exist."
