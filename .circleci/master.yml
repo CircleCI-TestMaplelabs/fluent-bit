@@ -333,7 +333,6 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
-# Download the latest release file
                     latest_release_url=$(curl -sL "https://api.github.com/repos/snappyflow/apm-agent/releases/latest" | grep -w "browser_download_url" | grep "download/fluentbit" | cut -d":" -f 2,3 | tr -d '"')
                     if [ -n "$latest_release_url" ]; then
                         wget -q "$latest_release_url" -O fluentbit.tar.gz
@@ -342,7 +341,6 @@ jobs:
                         exit 1
                     fi
 
-                    # Check if fluentbit.tar.gz exists
                     if [ -f "fluentbit.tar.gz" ]; then
                         mkdir fluentbit
                         cp fluentbit.tar.gz fluentbit/
