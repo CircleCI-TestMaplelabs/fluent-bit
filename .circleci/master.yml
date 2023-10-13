@@ -342,19 +342,20 @@ jobs:
                         cd fluentbit
                         tar -zxvf fluentbit.tar.gz
                         rm fluentbit.tar.gz
-                        cp ../build/bin/* .
-                        tar -cvzf fluentbit.tar.gz .
+                        cp  -r ../build/bin/* .
+                        cd ..
+                        tar -cvzf fluentbit.tar.gz fluentbit
                         ls
                     else
                         echo "fluentbit.tar.gz does not exist."
                         exit 1
                     fi 
       - store_artifacts:
-          path: fluentbit/fluentbit.tar.gz
+          path: fluentbit.tar.gz
       - persist_to_workspace:
           root: .
           paths:
-            - fluentbit/fluentbit.tar.gz                     
+            - fluentbit.tar.gz                     
   publish-github-release:
     docker:
       - image: cibuilds/github:0.10
@@ -368,7 +369,7 @@ jobs:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: | 
                     # Upload to GitHub using ghr
-                    ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.g
+                    ghr -t "$GITTOKEN" -u pradeep-g-ml -r apm-agent --prerelease -b master -delete "v$VERSION-master" fluentbit.tar.gz
                     echo "Successfully uploaded version v$VERSION-master."          
                                                                                                                                                                                            
 ### Pipeline Workflows
