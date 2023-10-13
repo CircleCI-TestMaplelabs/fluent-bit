@@ -333,11 +333,17 @@ jobs:
       - run:
           name: "Publish PreRelease for Master Branch on GitHub"
           command: |
+            mkdir -p fluentbit
+            cd fluentbit
             curl -sL https://api.github.com/repos/snappyflow/apm-agent/releases?per_page=500 | grep -w "browser_download_url"|grep "download/fluentbit" | head -n 1 | cut -d":" -f 2,3 | tr -d '"' | xargs wget -q
             ls
+            tar -zxvf fluentbit.tar.gz
+            rm fluentbit.tar.gz
+            cp ../build/bin/* .
+            tar -cvzf fluentbit.tar.gz .           
             VERSION=$SFAGENT_VERSION
             echo $VERSION
-            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" build/bin                                                                                                                                                                                              
+            ghr -t ${GITTOKEN} -u pradeep-g-ml -r apm-agent --prerelease -c master -delete "v"${VERSION}"-master" fluentbit/fluentbit.tar.gz                                                                                                                                                                                             
 ### Pipeline Workflows
 workflows:   
 ###  fluentBitcentos7:
