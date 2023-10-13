@@ -1,7 +1,7 @@
 ## Beginners Guide to Contributing to Fluent Bit.
 
 Assuming you have some basic knowledge of C, this guide should help you understand how to make code
-changes to Fluent Bit.
+changes to Fluent Bit..
 
 ### Table of Contents
 - [Libraries](#libraries)
