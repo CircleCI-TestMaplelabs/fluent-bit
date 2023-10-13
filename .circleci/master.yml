@@ -342,6 +342,8 @@ jobs:
                         cd fluentbit
                         tar -zxvf fluentbit.tar.gz
                         rm fluentbit.tar.gz
+                        rm fluent-bit
+                        ls
                         cp  -r ../build/bin/* .
                         cd ..
                         tar -cvzf fluentbit.tar.gz fluentbit
